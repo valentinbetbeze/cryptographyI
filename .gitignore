@@ -1,0 +1,6 @@
+.cache
+build
+
+TODO.md
+compile_commands.json
+pa/week1-full.c
