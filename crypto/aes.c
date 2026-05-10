@@ -358,8 +358,8 @@ int aes_encrypt(const uint32_t *pt, uint32_t *ct, aes_key_t *k)
 /**
  * @brief AES decryption function
  *
- * @param[in]  pt Plaintext to encrypt
- * @param[out] ct Resulting ciphertext
+ * @param[in]  ct Ciphertext to decrypt
+ * @param[out] pt Resulting plaintext
  * @param[in]  k  AES secret key
  *
  * @return 0 if successful; else error code.

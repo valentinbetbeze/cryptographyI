@@ -66,21 +66,27 @@ macro(add_fips_tests TEST_EXECUTABLE CAVP_DIR PREFIX)
 endmacro()
 
 # ============================================
-# Known Answer Tests
+# FIPS Test Declaration
 # ============================================
 add_executable(test_des_ecb     tests/des/test_des_ecb.c)
 add_executable(test_aes_ecb     tests/aes/test_aes_ecb.c)
+add_executable(test_aes_ecb_mct tests/aes/test_aes_ecb_mct.c)
 add_executable(test_aes_cbc     tests/aes/test_aes_cbc.c)
+add_executable(test_aes_cbc_mct tests/aes/test_aes_cbc_mct.c)
 add_executable(test_aes_ctr     tests/aes/test_aes_ctr.c)
 
 target_link_libraries(test_des_ecb      PRIVATE crypto utils)
 target_link_libraries(test_aes_ecb      PRIVATE crypto utils)
+target_link_libraries(test_aes_ecb_mct  PRIVATE crypto utils)
 target_link_libraries(test_aes_cbc      PRIVATE crypto utils)
+target_link_libraries(test_aes_cbc_mct  PRIVATE crypto utils)
 target_link_libraries(test_aes_ctr      PRIVATE crypto utils)
 
 add_fips_tests(test_des_ecb     "des/fips_kat" "TECB")
 add_fips_tests(test_aes_ecb     "aes/fips_kat" "ECB")
+add_fips_tests(test_aes_ecb_mct "aes/fips_mct" "ECB")
 add_fips_tests(test_aes_cbc     "aes/fips_kat" "CBC")
+add_fips_tests(test_aes_cbc_mct "aes/fips_mct" "CBC")
 add_fips_tests(test_aes_ctr     "aes/fips_kat" "CTR")
 
 # ============================================

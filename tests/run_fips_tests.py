@@ -3,24 +3,90 @@
 import sys
 import subprocess
 import re
+from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
+from typing import Callable
 
-def parse_rsp_file(filepath):
+class Vector(StrEnum):
+    KAT = 'Known Answer Test'
+    MCT = 'Monte Carlo Test'
+
+class Family(StrEnum):
+    BLOCK = 'block cipher'
+    HASH = 'hash'
+
+@dataclass
+class TestConfig:
+    """Class for holding the configuration of a FIPS CAVP test."""
+    vector: Vector
+    family: Family
+    scheme: str
+    components: dict[str, int|str]
+    tests: list[dict[str, str]]
+
+# ============================================
+# Block cipher tests
+# ============================================
+
+def parse_rsp_block_cipher(rsp_filepath: str, rsp_filename: str) -> TestConfig:
     """
-    Parse FIPS .rsp file and extract test vectors.
+    Parse FIPS .rsp file and extract test vectors for block ciphers (des, aes).
     Returns list of test cases with their parameters.
     """
-    tests = []
-    current_test: dict[str, int | str ] = {}
+    if any(token in rsp_filename for token in {'Monte', 'MCT'}):
+        vector = Vector.MCT
+    else:
+        vector = Vector.KAT
+
+    # TODO Rework logic as assuming the cipher from the mode of operation is weak.
+    #      Idea: use the information in the file's comment header.
+    if rsp_filename.startswith('TECB'):
+        cipher = 'des'
+        mode = 'ecb'
+    elif rsp_filename.startswith('ECB'):
+        cipher = 'aes'
+        mode = 'ecb'
+    elif rsp_filename.startswith('CBC'):
+        cipher = 'aes'
+        mode = 'cbc'
+    elif rsp_filename.startswith('CTR'):
+        cipher = 'aes'
+        mode = 'ctr'
+    else:
+        raise ValueError(f"Unknown block cipher response file format: {rsp_filename}")
+
+    if cipher == 'aes':
+        key_bits = extract_key_size(rsp_filename)
+        if not key_bits:
+            print(f"Could not determine key size from filename: {rsp_filename}")
+            sys.exit(1)
+    else:
+        # DES key size is 56 bits + 8 bits for parity check
+        key_bits = 64
+
+    cfg = TestConfig(
+        vector = vector,
+        family = Family.BLOCK,
+        scheme = cipher + '_' + mode,
+        components = {
+            'cipher': cipher,
+            'mode': mode,
+            'key_bits': key_bits
+        },
+        tests = []
+    )
+
+    current_test: dict[str, str] = {}
     
-    with open(filepath, 'r') as f:
+    with open(rsp_filepath, 'r') as f:
         for line in f:
             line = line.strip()
-            
+
             # Skip comments and empty lines
             if not line or line.startswith('#'):
                 continue
-            
+
             # Track if we're in ENCRYPT or DECRYPT section
             if line.startswith('[ENCRYPT]'):
                 current_section = 'ENCRYPT'
@@ -28,35 +94,38 @@ def parse_rsp_file(filepath):
             elif line.startswith('[DECRYPT]'):
                 current_section = 'DECRYPT'
                 continue
-            
+
             # Parse key = value pairs
             if '=' in line:
-                key, value = line.split('=', 1)
-                key = key.strip()
-                value = value.strip()
-                
+                key, value = (part.strip() for part in line.split('=', 1))
+
                 if key == 'COUNT':
                     # New test case
                     if current_test:
-                        tests.append(current_test)
-                    current_test = {'COUNT': int(value), 'SECTION': current_section}
+                        cfg.tests.append(current_test)
+                    current_test = {'COUNT': value, 'SECTION': current_section}
                 else:
                     current_test[key] = value.lower()  # Lowercase for consistency
-        
+
         # Add last test
         if current_test:
-            tests.append(current_test)
+            cfg.tests.append(current_test)
     
-    return tests
+    return cfg
 
-def run_test_aes_ecb(test_executable, operation, key_bits, key_hex, data_hex):
+def extract_key_size(rsp_filename: str):
+    """Extract key size (128, 192, 256) from filename."""
+    match = re.search(r'(\d+)', rsp_filename)
+    return int(match.group(1)) if match else None
+
+def run_test_aes_ecb(test_exec, operation, key_bits, key_hex, data_hex):
     """
     Run AES ECB test executable.
     Usage: test_aes_ecb <encrypt|decrypt> <key_bits> <key_hex> <data_hex>
     """
     try:
         result = subprocess.run(
-            [test_executable, operation, str(key_bits), key_hex, data_hex],
+            [test_exec, operation, str(key_bits), key_hex, data_hex],
             capture_output=True,
             text=True,
             check=True
@@ -66,14 +135,14 @@ def run_test_aes_ecb(test_executable, operation, key_bits, key_hex, data_hex):
         print(f"Error running test: {e.stderr}")
         return None
 
-def run_test_aes_cbc(test_executable, operation, key_bits, key_hex, iv_hex, data_hex):
+def run_test_aes_cbc(test_exec, operation, key_bits, key_hex, iv_hex, data_hex):
     """
     Run AES CBC test executable.
     Usage: test_aes_cbc <decrypt> <key_bits> <key_hex> <iv_hex> <data_hex>
     """
     try:
         result = subprocess.run(
-            [test_executable, operation, str(key_bits), key_hex, iv_hex, data_hex],
+            [test_exec, operation, str(key_bits), key_hex, iv_hex, data_hex],
             capture_output=True,
             text=True,
             check=True
@@ -83,14 +152,14 @@ def run_test_aes_cbc(test_executable, operation, key_bits, key_hex, iv_hex, data
         print(f"Error running test: {e.stderr}")
         return None
 
-def run_test_aes_ctr(test_executable, operation, key_bits, key_hex, nonce_hex, data_hex):
+def run_test_aes_ctr(test_exec, operation, key_bits, key_hex, nonce_hex, data_hex):
     """
     Run AES CTR test executable.
     Usage: test_aes_ctr <decrypt> <key_bits> <key_hex> <nonce_hex> <data_hex>
     """
     try:
         result = subprocess.run(
-            [test_executable, operation, str(key_bits), key_hex, nonce_hex, data_hex],
+            [test_exec, operation, str(key_bits), key_hex, nonce_hex, data_hex],
             capture_output=True,
             text=True,
             check=True
@@ -100,14 +169,14 @@ def run_test_aes_ctr(test_executable, operation, key_bits, key_hex, nonce_hex, d
         print(f"Error running test: {e.stderr}")
         return None
 
-def run_test_des(test_executable, operation, key_hex, data_hex):
+def run_test_des(test_exec, operation, key_hex, data_hex):
     """
     Run DES test executable (no key_bits parameter needed).
     Usage: test_des_ecb <encrypt|decrypt> <key_hex> <data_hex>
     """
     try:
         result = subprocess.run(
-            [test_executable, operation, key_hex, data_hex],
+            [test_exec, operation, key_hex, data_hex],
             capture_output=True,
             text=True,
             check=True
@@ -117,109 +186,60 @@ def run_test_des(test_executable, operation, key_hex, data_hex):
         print(f"Error running test: {e.stderr}")
         return None
 
-def extract_key_size(filename):
-    """Extract key size (128, 192, 256) from filename."""
-    match = re.search(r'(\d+)', filename)
-    return int(match.group(1)) if match else None
-
-def get_test_type(filename):
+def run_test_block_cipher(cfg: TestConfig, test_exec: str) -> tuple[int, int, int]:
     """
-    Determine test type from filename.
-    Returns: 'des_ecb', 'aes_ecb', 'aes_cbc', or 'aes_ctr'
+    Run a sequence of block cipher FIPS CAVP test cases.
+    Returns test output: (passed, failed, skipped)
     """
-    filename_upper = filename.upper()
-    
-    if filename_upper.startswith('TECB'):
-        return 'des_ecb'
-    elif filename_upper.startswith('ECB'):
-        return 'aes_ecb'
-    elif filename_upper.startswith('CBC'):
-        return 'aes_cbc'
-    elif filename_upper.startswith('CTR'):
-        return 'aes_ctr'
-    else:
-        return None
-
-def main():
-    if len(sys.argv) != 3:
-        print(f"Usage: {sys.argv[0]} <test_executable> <rsp_file>")
-        sys.exit(1)
-    
-    test_executable = sys.argv[1]
-    rsp_file = sys.argv[2]
-    
-    filename = Path(rsp_file).name
-    test_type = get_test_type(filename)
-    
-    if not test_type:
-        print(f"Could not determine test type from filename: {filename}")
-        print("Expected prefix: ECB*, CBC*, CTR*, or TECB*")
-        sys.exit(1)
-    
-    # Extract key size for AES tests
-    if test_type.startswith('aes'):
-        key_bits = extract_key_size(filename)
-        if not key_bits:
-            print(f"Could not determine key size from filename: {rsp_file}")
-            sys.exit(1)
-        print(f"Running {test_type.upper()} tests from: {rsp_file} (AES-{key_bits})")
-    else:
-        key_bits = None
-        print(f"Running DES ECB tests from: {rsp_file}")
-    
-    # Parse test vectors
-    tests = parse_rsp_file(rsp_file)
-    print(f"Found {len(tests)} test cases")
-    
-    # Run tests
     passed = 0
     failed = 0
     skipped = 0
-    
-    for test in tests:
+
+    for test in cfg.tests:
         count = test['COUNT']
         section = test.get('SECTION', 'DECRYPT')
         key = test['KEY']
-        
+        key_bits = cfg.components['key_bits']
+
         # Skip encryption tests for CBC/CTR (not implemented yet)
-        if section == 'ENCRYPT' and test_type in ['aes_cbc', 'aes_ctr']:
+        if section == 'ENCRYPT' and cfg.scheme in {'aes_cbc', 'aes_ctr'}:
             skipped += 1
             print(f"  Test {count} (encrypt): SKIP (encryption not implemented)")
             continue
-        
+
         # Determine plaintext/ciphertext based on section
         if section == 'ENCRYPT':
-            plaintext = test['PLAINTEXT']
-            expected_ciphertext = test['CIPHERTEXT']
             operation = 'encrypt'
-            input_data = plaintext
-            expected_output = expected_ciphertext
+            input_data = test['PLAINTEXT']
+            expected_output = test['CIPHERTEXT']
         else:  # DECRYPT
-            plaintext = test['PLAINTEXT']
-            expected_ciphertext = test['CIPHERTEXT']
             operation = 'decrypt'
-            input_data = expected_ciphertext
-            expected_output = plaintext
-        
+            input_data = test['CIPHERTEXT']
+            expected_output = test['PLAINTEXT']
+
         # Get IV/nonce for CBC/CTR modes
         iv = test.get('IV', None)
-        
+
         # Validate required fields
-        if test_type in ['aes_cbc', 'aes_ctr'] and not iv:
+        if cfg.scheme in {'aes_cbc', 'aes_ctr'} and iv is None:
             print(f"  Test {count}: SKIP (missing IV/nonce)")
             skipped += 1
             continue
-        
+
         # Run test
-        if test_type == 'des_ecb':
-            actual_output = run_test_des(test_executable, operation, key, input_data)
-        elif test_type == 'aes_ecb':
-            actual_output = run_test_aes_ecb(test_executable, operation, key_bits, key, input_data)
-        elif test_type == 'aes_cbc':
-            actual_output = run_test_aes_cbc(test_executable, operation, key_bits, key, iv, input_data)
-        elif test_type == 'aes_ctr':
-            actual_output = run_test_aes_ctr(test_executable, operation, key_bits, key, iv, input_data)
-        
+        match cfg.scheme:
+            case 'des_ecb':
+                actual_output = run_test_des(test_exec, operation, key, input_data)
+            case 'aes_ecb':
+                actual_output = run_test_aes_ecb(test_exec, operation, key_bits, key, input_data)
+            case 'aes_cbc':
+                actual_output = run_test_aes_cbc(test_exec, operation, key_bits, key, iv, input_data)
+            case 'aes_ctr':
+                actual_output = run_test_aes_ctr(test_exec, operation, key_bits, key, iv, input_data)
+            case _:
+                print(f"Unsupported block cipher: {cfg.scheme}")
+                sys.exit(1)
+
         if actual_output == expected_output:
             passed += 1
             print(f"  Test {count} ({operation}): PASS")
@@ -232,12 +252,79 @@ def main():
             print(f"    Input:    {input_data}")
             print(f"    Expected: {expected_output}")
             print(f"    Got:      {actual_output}")
+
+    return (passed, failed, skipped)
+
     
+# ============================================
+# Main logic
+# ============================================
+
+PARSERS: dict[str, Callable[[str, str], TestConfig]] = {
+    'TECB': parse_rsp_block_cipher,
+    'ECB':  parse_rsp_block_cipher,
+    'CBC':  parse_rsp_block_cipher,
+    'CTR':  parse_rsp_block_cipher,
+    'SHA':  parse_rsp_hash
+}
+
+RUNNERS = {
+    Family.BLOCK: run_test_block_cipher,
+    Family.HASH: run_test_hash
+}
+
+def parse_test(rsp_filepath: str) -> TestConfig | None:
+    """
+    Parse a FIPS .rsp test file.
+    Return a TestConfig object holding the parsed data, or None if the .rsp
+    test file is not supported.
+    """
+    rsp_filename = Path(rsp_filepath).name
+    filename_upper = rsp_filename.upper()
+
+    for key, parser in PARSERS.items():
+        if filename_upper.startswith(key):
+            return parser(rsp_filepath, rsp_filename)
+
+    return None
+
+def run_test(cfg: TestConfig, test_exec: str) -> tuple[int, int, int]:
+    """
+    Run a FIPS test by selecting the appropriate test runner from RUNNERS.
+    """
+    for family, cb in RUNNERS.items():
+        if cfg.family == family:
+            return cb(cfg, test_exec)
+
+    raise ValueError(f"Failed to find test function for {cfg.family}")
+
+def main():
+    if len(sys.argv) != 3:
+        print(f"Usage: {sys.argv[0]} <test_exec> <rsp_file>")
+        sys.exit(1)
+
+    test_exec = sys.argv[1]
+    rsp_filepath = sys.argv[2]
+
+    cfg = parse_test(rsp_filepath)
+    if cfg is None:
+        print(f"Unsupported file")
+        sys.exit(1)
+
+    if cfg.vector == Vector.MCT and cfg.scheme in {'des_ecb', 'aes_ctr'}:
+        print(f"Monte Carlo Test no implemented for {cfg.scheme}")
+        sys.exit(1)
+
+    print(f"Found {len(cfg.tests)} test cases")
+    print(f"Running {cfg.scheme.upper()} tests from: {rsp_filepath}")
+
+    passed, failed, skipped = run_test(cfg, test_exec)
+
     # Summary
     print(f"\n{'='*50}")
     print(f"Results: {passed} passed, {failed} failed, {skipped} skipped")
     print(f"{'='*50}")
-    
+
     sys.exit(0 if failed == 0 else 1)
 
 if __name__ == '__main__':
