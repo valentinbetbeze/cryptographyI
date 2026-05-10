@@ -39,7 +39,7 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 # Macro to add FIPS tests for a category
 # Usage: add_fips_tests(test_executable cavp prefix)
-# Example: add_fips_tests(test_aes_ecb "fips_kat_aes" "ECB")
+# Example: add_fips_tests(test_aes_ecb "aes/fips_kat" "ECB")
 macro(add_fips_tests TEST_EXECUTABLE CAVP_DIR PREFIX)
     # Find all .rsp files matching the prefix
     file(GLOB RSP_FILES "${CMAKE_SOURCE_DIR}/tests/${CAVP_DIR}/${PREFIX}*.rsp")
@@ -61,30 +61,30 @@ macro(add_fips_tests TEST_EXECUTABLE CAVP_DIR PREFIX)
             )
         endforeach()
     else()
-        message(WARNING "No ${PREFIX} test vectors found in tests/fips_kat_aes/")
+        message(WARNING "No ${PREFIX} test vectors found in {CAVP_DIR}")
     endif()
 endmacro()
 
 # ============================================
 # Known Answer Tests
 # ============================================
-add_executable(test_des_ecb tests/test_des_ecb.c)
-add_executable(test_aes_ecb tests/test_aes_ecb.c)
-add_executable(test_aes_cbc tests/test_aes_cbc.c)
-add_executable(test_aes_ctr tests/test_aes_ctr.c)
+add_executable(test_des_ecb     tests/des/test_des_ecb.c)
+add_executable(test_aes_ecb     tests/aes/test_aes_ecb.c)
+add_executable(test_aes_cbc     tests/aes/test_aes_cbc.c)
+add_executable(test_aes_ctr     tests/aes/test_aes_ctr.c)
 
-target_link_libraries(test_des_ecb PRIVATE crypto utils)
-target_link_libraries(test_aes_ecb PRIVATE crypto utils)
-target_link_libraries(test_aes_cbc PRIVATE crypto utils)
-target_link_libraries(test_aes_ctr PRIVATE crypto utils)
+target_link_libraries(test_des_ecb      PRIVATE crypto utils)
+target_link_libraries(test_aes_ecb      PRIVATE crypto utils)
+target_link_libraries(test_aes_cbc      PRIVATE crypto utils)
+target_link_libraries(test_aes_ctr      PRIVATE crypto utils)
 
-add_fips_tests(test_des_ecb "fips_kat_des" "TECB")
-add_fips_tests(test_aes_ecb "fips_kat_aes" "ECB")
-add_fips_tests(test_aes_cbc "fips_kat_aes" "CBC")
-add_fips_tests(test_aes_ctr "fips_kat_aes" "CTR")
+add_fips_tests(test_des_ecb     "des/fips_kat" "TECB")
+add_fips_tests(test_aes_ecb     "aes/fips_kat" "ECB")
+add_fips_tests(test_aes_cbc     "aes/fips_kat" "CBC")
+add_fips_tests(test_aes_ctr     "aes/fips_kat" "CTR")
 
 # ============================================
-# Cryptography I solutions
+# Cryptography I Solutions
 # ============================================
 add_executable(week1 pa/week1.c)
 add_executable(week2 pa/week2.c)
