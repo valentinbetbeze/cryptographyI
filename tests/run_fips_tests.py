@@ -255,7 +255,125 @@ def run_test_block_cipher(cfg: TestConfig, test_exec: str) -> tuple[int, int, in
 
     return (passed, failed, skipped)
 
+# ============================================
+# Secure hash test functions
+# ============================================
+
+def parse_rsp_hash(rsp_filepath: str, rsp_filename: str) -> TestConfig:
+    """
+    Parse FIPS .rsp file and extract test vectors for secure hashing algs.
+    Returns list of test cases with their parameters.
+    """
+    if any(token in rsp_filename for token in {'Monte', 'MCT'}):
+        vector = Vector.MCT
+    else:
+        vector = Vector.KAT
+
+    if rsp_filename.startswith('SHA'):
+        scheme = 'sha'
+    else:
+        raise ValueError(f"Unknown block cipher response file format: {rsp_filename}")
+
+    cfg = TestConfig(
+        vector = vector,
+        family = Family.HASH,
+        scheme = scheme,
+        components = {},
+        tests = []
+    )
+
+    count = 0
+    current_test: dict[str, str] = {}
+
+    with open(rsp_filepath, 'r') as f:
+        for line in f:
+            line = line.strip()
+
+            # Skip comments, empty lines, and digest length
+            if not line or line.startswith('#') or line.startswith('['):
+                continue
+
+            if '=' in line:
+                key, value = (part.strip() for part in line.split('=', 1))
+
+                if key in {'Len', 'COUNT'}:
+                    if current_test:
+                        cfg.tests.append(current_test)
+
+                    current_test = {key: value}
+
+                    if key == 'Len':
+                        current_test['COUNT'] = str(count)
+                        count += 1
+                else:
+                    current_test[key] = value.lower()  # Lowercase for consistency
+
+        # Add last test
+        if current_test:
+            cfg.tests.append(current_test)
     
+    return cfg
+
+def run_test_sha(test_exec: str, msg_hex: str):
+    """
+    Run SHA test executable.
+    Usage: test_sha <msg_hex>
+    """
+    try:
+        result = subprocess.run(
+            [test_exec, msg_hex],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip().lower()
+    except subprocess.CalledProcessError as e:
+        print(f"Error running test: {e.stderr}")
+        return None
+
+def run_test_hash(cfg: TestConfig, test_exec: str) -> tuple[int, int, int]:
+    """
+    Run a sequence of secure hash FIPS CAVP test cases.
+    Returns test output: (passed, failed, skipped)
+    """
+    passed = 0
+    failed = 0
+    skipped = 0
+
+    if cfg.vector == Vector.MCT:
+        seed = cfg.tests.pop(0)['Seed']
+
+    for test in cfg.tests:
+        count = int(test['COUNT'])
+        expected_output = test['MD']
+
+        if cfg.vector == Vector.MCT:
+            msg = seed
+        else:
+            msg = test['Msg']
+
+        md = run_test_sha(test_exec, msg)
+
+        if md is None:
+            if cfg.vector == Vector.MCT:
+                return passed, failed, len(cfg.tests) - count
+            skipped += 1
+        else:
+            if cfg.vector == Vector.MCT:
+                seed = md
+
+            if md == expected_output:
+                passed += 1
+                print(f"  Test {count} : PASS")
+            else:
+                failed += 1
+                print(f"  Test {count} : FAIL")
+                print(f"    Input:    {msg}")
+                print(f"    Expected: {expected_output}")
+                print(f"    Got:      {md}")
+
+    return passed, failed, skipped
+
 # ============================================
 # Main logic
 # ============================================

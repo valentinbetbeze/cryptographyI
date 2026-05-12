@@ -15,6 +15,7 @@ add_library(crypto
     crypto/aes.c
     crypto/aes_cbc.c
     crypto/aes_ctr.c
+    crypto/sha.c
 )
 
 target_include_directories(crypto PUBLIC
@@ -74,6 +75,8 @@ add_executable(test_aes_ecb_mct tests/aes/test_aes_ecb_mct.c)
 add_executable(test_aes_cbc     tests/aes/test_aes_cbc.c)
 add_executable(test_aes_cbc_mct tests/aes/test_aes_cbc_mct.c)
 add_executable(test_aes_ctr     tests/aes/test_aes_ctr.c)
+add_executable(test_sha         tests/sha/test_sha.c)
+add_executable(test_sha_mct     tests/sha/test_sha_mct.c)
 
 target_link_libraries(test_des_ecb      PRIVATE crypto utils)
 target_link_libraries(test_aes_ecb      PRIVATE crypto utils)
@@ -81,6 +84,8 @@ target_link_libraries(test_aes_ecb_mct  PRIVATE crypto utils)
 target_link_libraries(test_aes_cbc      PRIVATE crypto utils)
 target_link_libraries(test_aes_cbc_mct  PRIVATE crypto utils)
 target_link_libraries(test_aes_ctr      PRIVATE crypto utils)
+target_link_libraries(test_sha          PRIVATE crypto utils)
+target_link_libraries(test_sha_mct      PRIVATE crypto utils)
 
 add_fips_tests(test_des_ecb     "des/fips_kat" "TECB")
 add_fips_tests(test_aes_ecb     "aes/fips_kat" "ECB")
@@ -88,6 +93,8 @@ add_fips_tests(test_aes_ecb_mct "aes/fips_mct" "ECB")
 add_fips_tests(test_aes_cbc     "aes/fips_kat" "CBC")
 add_fips_tests(test_aes_cbc_mct "aes/fips_mct" "CBC")
 add_fips_tests(test_aes_ctr     "aes/fips_kat" "CTR")
+add_fips_tests(test_sha         "sha/fips_kat" "SHA")
+add_fips_tests(test_sha         "sha/fips_mct" "SHA")
 
 # ============================================
 # Cryptography I Solutions
