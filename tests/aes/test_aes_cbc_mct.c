@@ -107,7 +107,8 @@ int main(int argc, char *argv[])
 
     for (int j = 0; j < 1000; j++)
     {
-        int ret = aes_cbc_decrypt(iv_words, ct_words, sizeof(ct_words), result, &key);
+        int ret =
+            aes_cbc_decrypt(iv_words, ct_words, sizeof(ct_words), result, &key);
         if (ret != 0)
         {
             fprintf(stderr, "Decryption failed with error code: %d\n", ret);

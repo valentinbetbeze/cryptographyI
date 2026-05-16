@@ -314,14 +314,14 @@ def parse_rsp_hash(rsp_filepath: str, rsp_filename: str) -> TestConfig:
     
     return cfg
 
-def run_test_sha(test_exec: str, msg_hex: str):
+def run_test_sha(test_exec: str, msg_hex: str, msg_len: str):
     """
     Run SHA test executable.
-    Usage: test_sha <msg_hex>
+    Usage: test_sha <msg_hex> <msg_len>
     """
     try:
         result = subprocess.run(
-            [test_exec, msg_hex],
+            [test_exec, msg_hex, msg_len],
             capture_output=True,
             text=True,
             check=True
@@ -348,29 +348,29 @@ def run_test_hash(cfg: TestConfig, test_exec: str) -> tuple[int, int, int]:
         expected_output = test['MD']
 
         if cfg.vector == Vector.MCT:
+            len_bytes = str(len(seed) // 2)
             msg = seed
         else:
+            len_bytes = str(int(test['Len']) // 8)
             msg = test['Msg']
 
-        md = run_test_sha(test_exec, msg)
+        md = run_test_sha(test_exec, msg, len_bytes)
 
-        if md is None:
-            if cfg.vector == Vector.MCT:
-                return passed, failed, len(cfg.tests) - count
-            skipped += 1
-        else:
+        if md is not None and md == expected_output:
+            passed += 1
+            print(f"  Test {count} : PASS")
+
             if cfg.vector == Vector.MCT:
                 seed = md
+        else:
+            failed += 1
+            print(f"  Test {count} : FAIL")
+            print(f"    Input:    {msg}")
+            print(f"    Expected: {expected_output}")
+            print(f"    Got:      {md}")
 
-            if md == expected_output:
-                passed += 1
-                print(f"  Test {count} : PASS")
-            else:
-                failed += 1
-                print(f"  Test {count} : FAIL")
-                print(f"    Input:    {msg}")
-                print(f"    Expected: {expected_output}")
-                print(f"    Got:      {md}")
+            if cfg.vector == Vector.MCT:
+                break
 
     return passed, failed, skipped
 

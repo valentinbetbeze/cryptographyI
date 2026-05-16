@@ -8,76 +8,65 @@
 
 int main(int argc, char *argv[])
 {
-    if (argc != 2)
+    if (argc != 3)
     {
-        fprintf(stderr, "Usage: %s <msg>\n", argv[0]);
+        fprintf(stderr, "Usage: %s <msg> <msg_len_bytes>\n", argv[0]);
         return 1;
     }
 
     const char *seed = argv[1];
-    size_t seed_len = strlen(seed);
-    if (seed_len == 0)
-    {
-        fprintf(stderr, "Invalid message length\n");
-        return 1;
-    }
+    int seed_len     = atoi(argv[2]);
 
     // Convert string to hex
-    size_t seed_bytes_len = seed_len / 2;
-    uint8_t *seed_bytes = malloc(seed_bytes_len);
+    uint8_t *seed_bytes = malloc(seed_len);
     if (!seed_bytes)
     {
         fprintf(stderr, "Failed to allocate memory for msg_bytes buffer\n");
         return 1;
     }
 
-    if (hex_to_bytes(seed, seed_bytes, seed_bytes_len) != 0)
+    if (hex_to_bytes(seed, seed_bytes, seed_len) != 0)
     {
         fprintf(stderr, "Invalid test message: full hex bytes are expected\n");
         free(seed_bytes);
         return 1;
     }
 
-    uint8_t *md_bytes = malloc(seed_bytes_len);
-    uint8_t *buf1 = malloc(seed_bytes_len);
-    uint8_t *buf2 = malloc(seed_bytes_len);
-    uint8_t *buf3 = malloc(seed_bytes_len);
-    uint8_t *msg = malloc(seed_bytes_len * 3U);
+    uint8_t *a   = malloc(seed_len);
+    uint8_t *b   = malloc(seed_len);
+    uint8_t *c   = malloc(seed_len);
+    uint8_t *msg = malloc(seed_len * 3U);
+    uint8_t md_bytes[SHA256_MD_SZ];
 
-    uint8_t *a = buf1;
-    uint8_t *b = buf2;
-    uint8_t *c = buf3;
+    memcpy(a, seed_bytes, seed_len);
+    memcpy(b, seed_bytes, seed_len);
+    memcpy(c, seed_bytes, seed_len);
 
-    memcpy(a, seed_bytes, seed_bytes_len);
-    memcpy(b, seed_bytes, seed_bytes_len);
-    memcpy(c, seed_bytes, seed_bytes_len);
-
-    for (int i = 0; i < 999; i++)
+    for (int i = 0; i < 1000; i++)
     {
-        memcpy((void *)((uintptr_t)msg + seed_bytes_len * 0U), a, seed_bytes_len);
-        memcpy((void *)((uintptr_t)msg + seed_bytes_len * 1U), b, seed_bytes_len);
-        memcpy((void *)((uintptr_t)msg + seed_bytes_len * 2U), c, seed_bytes_len);
+        memcpy((void *)(msg + seed_len * 0U), a, seed_len);
+        memcpy((void *)(msg + seed_len * 1U), b, seed_len);
+        memcpy((void *)(msg + seed_len * 2U), c, seed_len);
 
-        if (sha256(msg, seed_bytes_len * 3U, md_bytes) != 0)
+        if (sha256(msg, seed_len * 3U, md_bytes) != 0)
         {
             fprintf(stderr, "SHA256 hash operation failed\n");
             free(seed_bytes);
-            free(md_bytes);
-            free(buf1);
-            free(buf2);
-            free(buf3);
+            free(a);
+            free(b);
+            free(c);
             free(msg);
             return 1;
         }
 
-        memcpy(a, b, seed_bytes_len);
-        memcpy(b, c, seed_bytes_len);
-        memcpy(c, md_bytes, seed_bytes_len);
+        memcpy(a, b, seed_len);
+        memcpy(b, c, seed_len);
+        memcpy(c, md_bytes, seed_len);
     }
 
     // Convert digest from byte array to hex string
-    const size_t md_len = sizeof(seed_bytes) * 2U + 1U;
-    char *md = malloc(md_len);
+    const size_t md_len = seed_len * 2U + 1U;
+    char *md            = malloc(md_len);
     if (!md)
     {
         fprintf(stderr, "Failed to allocate memory for md buffer\n");
@@ -85,17 +74,13 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    bytes_to_hex(seed_bytes, sizeof(seed_bytes), md);
+    bytes_to_hex(md_bytes, seed_len, md);
     md[md_len - 1U] = '\0';
 
     printf("%s\n", md);
 
     // Clean
     free(seed_bytes);
-    free(md_bytes);
-    free(buf1);
-    free(buf2);
-    free(buf3);
     free(msg);
     free(md);
 
