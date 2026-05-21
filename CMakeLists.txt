@@ -101,6 +101,8 @@ add_fips_tests(test_sha_mct     "sha/fips_mct" "SHA")
 # ============================================
 add_executable(week1 pa/week1.c)
 add_executable(week2 pa/week2.c)
+add_executable(week3 pa/week3.c)
 
 target_link_libraries(week1 PRIVATE utils)
 target_link_libraries(week2 PRIVATE crypto utils)
+target_link_libraries(week3 PRIVATE crypto utils curl)
