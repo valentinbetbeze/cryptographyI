@@ -137,9 +137,9 @@ static inline uint32_t sha256_sig1(uint32_t x)
  *
  * @retval 0 if successful; else 1
  */
-int sha256(const uint8_t *msg, uint64_t len, uint8_t *md)
+int sha256(const uint8_t *msg, size_t len, uint8_t *md)
 {
-    if (!msg || !md || len > (UINT64_MAX / 8U))
+    if (!msg || !md || len > (SIZE_MAX / 8U))
     {
         return 1;
     }
