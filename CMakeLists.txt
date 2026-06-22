@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.31)
+cmake_minimum_required(VERSION 3.22)
 project(cryptographyI LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
@@ -36,7 +36,7 @@ target_include_directories(utils PUBLIC
 # FIPS Test Infrastructure
 # ============================================
 # Find Python
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
+find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
 
 # Macro to add FIPS tests for a category
 # Usage: add_fips_tests(test_executable cavp prefix)

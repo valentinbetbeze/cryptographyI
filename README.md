@@ -14,9 +14,11 @@ The code in this repository is not intended to be production-grade cryptographic
 ## Getting Started
 
 Install the following:
-* cmake >= 3.31.6
+* cmake >= 3.22.1
 * gcc >= 15.2.1
 * ninja >= 1.12.1
+* libcurl4-openssl-dev >= 7.81.0
+* python >= 3.11.0
 
 Build with:
 `cmake --preset gcc-release && cmake --build --preset gcc-release`
