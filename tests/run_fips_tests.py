@@ -15,6 +15,7 @@ class Vector(StrEnum):
 class Family(StrEnum):
     BLOCK = 'block cipher'
     HASH = 'hash'
+    MAC = 'message authentication code'
 
 @dataclass
 class TestConfig:
@@ -375,6 +376,104 @@ def run_test_hash(cfg: TestConfig, test_exec: str) -> tuple[int, int, int]:
     return passed, failed, skipped
 
 # ============================================
+# Message authentication code test functions
+# ============================================
+
+def parse_rsp_mac(rsp_filepath: str, rsp_filename: str) -> TestConfig:
+    """
+    Parse a FIPS .rsp file and extract HMAC test vectors. KAT only.
+    Returns list of test cases with their parameters.
+    """
+    if rsp_filename.upper().startswith('HMAC'):
+        scheme = 'hmac'
+    else:
+        raise ValueError(f"Unknown MAC response file format: {rsp_filename}")
+
+    cfg = TestConfig(
+        vector = Vector.KAT,
+        family = Family.MAC,
+        scheme = scheme,
+        components = {'hash': 'sha256', 'md_bytes': 32},  # [L=32] => SHA-256
+        tests = []
+    )
+
+    current_test: dict[str, str] = {}
+
+    with open(rsp_filepath, 'r') as f:
+        for line in f:
+            line = line.strip()
+
+            # Skip comments, empty lines, and digest length
+            if not line or line.startswith('#') or line.startswith('['):
+                continue
+
+            if '=' in line:
+                key, value = (part.strip() for part in line.split('=', 1))
+
+                if key == 'Count':
+                    if current_test:
+                        cfg.tests.append(current_test)
+                    current_test = {'COUNT': value}
+                else:
+                    current_test[key] = value.lower()  # Lowercase for consistency
+
+        # Add last test
+        if current_test:
+            cfg.tests.append(current_test)
+
+    return cfg
+
+def run_test_hmac(test_exec, key_hex, klen, msg_hex, msglen, tlen):
+    """
+    Run HMAC test executable.
+    Usage: test_hmac <key_hex> <klen> <msg_hex> <msglen> <tlen>
+    """
+    try:
+        result = subprocess.run(
+            [test_exec, key_hex, str(klen), msg_hex, str(msglen), str(tlen)],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip().lower()
+    except subprocess.CalledProcessError as e:
+        print(f"Error running test: {e.stderr}")
+        return None
+
+def run_test_mac(cfg: TestConfig, test_exec: str) -> tuple[int, int, int]:
+    """
+    Run a sequence of HMAC FIPS CAVP test cases.
+    Returns test output: (passed, failed, skipped)
+    """
+    passed = 0
+    failed = 0
+    skipped = 0
+
+    for test in cfg.tests:
+        count    = int(test['COUNT'])
+        klen     = int(test['klen'])
+        tlen     = int(test['tlen'])
+        key_hex  = test['key']
+        msg_hex  = test['msg']
+        msglen   = len(msg_hex) // 2          # message length in bytes
+        expected = test['mac']                # already truncated to tlen bytes
+
+        tag = run_test_hmac(test_exec, key_hex, klen, msg_hex, msglen, tlen)
+
+        if tag is not None and tag == expected:
+            passed += 1
+            print(f"  Test {count} : PASS")
+        else:
+            failed += 1
+            print(f"  Test {count} : FAIL")
+            print(f"    Key:      {key_hex}")
+            print(f"    Msg:      {msg_hex}")
+            print(f"    Expected: {expected}")
+            print(f"    Got:      {tag}")
+
+    return passed, failed, skipped
+
+# ============================================
 # Main logic
 # ============================================
 
@@ -383,12 +482,14 @@ PARSERS: dict[str, Callable[[str, str], TestConfig]] = {
     'ECB':  parse_rsp_block_cipher,
     'CBC':  parse_rsp_block_cipher,
     'CTR':  parse_rsp_block_cipher,
-    'SHA':  parse_rsp_hash
+    'SHA':  parse_rsp_hash,
+    'HMAC': parse_rsp_mac
 }
 
 RUNNERS = {
     Family.BLOCK: run_test_block_cipher,
-    Family.HASH: run_test_hash
+    Family.HASH: run_test_hash,
+    Family.MAC: run_test_mac
 }
 
 def parse_test(rsp_filepath: str) -> TestConfig | None:
