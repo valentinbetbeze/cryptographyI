@@ -393,7 +393,7 @@ def parse_rsp_mac(rsp_filepath: str, rsp_filename: str) -> TestConfig:
         vector = Vector.KAT,
         family = Family.MAC,
         scheme = scheme,
-        components = {'hash': 'sha256', 'md_bytes': 32},  # [L=32] => SHA-256
+        components = {},
         tests = []
     )
 
@@ -413,7 +413,7 @@ def parse_rsp_mac(rsp_filepath: str, rsp_filename: str) -> TestConfig:
                 if key == 'Count':
                     if current_test:
                         cfg.tests.append(current_test)
-                    current_test = {'COUNT': value}
+                    current_test = {'Count': value}
                 else:
                     current_test[key] = value.lower()  # Lowercase for consistency
 
@@ -450,13 +450,13 @@ def run_test_mac(cfg: TestConfig, test_exec: str) -> tuple[int, int, int]:
     skipped = 0
 
     for test in cfg.tests:
-        count    = int(test['COUNT'])
-        klen     = int(test['klen'])
-        tlen     = int(test['tlen'])
-        key_hex  = test['key']
-        msg_hex  = test['msg']
+        count    = int(test['Count'])
+        klen     = int(test['Klen'])
+        tlen     = int(test['Tlen'])
+        key_hex  = test['Key']
+        msg_hex  = test['Msg']
         msglen   = len(msg_hex) // 2          # message length in bytes
-        expected = test['mac']                # already truncated to tlen bytes
+        expected = test['Mac']                # already truncated to tlen bytes
 
         tag = run_test_hmac(test_exec, key_hex, klen, msg_hex, msglen, tlen)
 

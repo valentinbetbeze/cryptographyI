@@ -98,7 +98,7 @@ add_fips_tests(test_aes_cbc_mct "aes/fips_mct" "CBC")
 add_fips_tests(test_aes_ctr     "aes/fips_kat" "CTR")
 add_fips_tests(test_sha         "sha/fips_kat" "SHA")
 add_fips_tests(test_sha_mct     "sha/fips_mct" "SHA")
-add_fips_tests(test_hmac        "hmac" "HMAC")
+add_fips_tests(test_hmac        "hmac"         "HMAC")
 
 # ============================================
 # Cryptography I Solutions
