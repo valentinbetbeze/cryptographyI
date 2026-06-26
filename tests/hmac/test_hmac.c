@@ -60,7 +60,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    hash_fn_t sha = { .fn = sha256, .md_len = SHA256_MD_SZ };
+    hash_descriptor_t sha = { .alg = SHA256, .fn = sha256 };
 
     uint8_t tag[SHA256_MD_SZ];
     if (hmac(&sha, key, klen, msg, msglen, tag) != 0)
