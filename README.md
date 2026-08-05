@@ -18,6 +18,7 @@ Install the following:
 * gcc >= 15.2.1
 * ninja >= 1.12.1
 * libcurl4-openssl-dev >= 7.81.0
+* libgmp-dev >= 6.3.0
 * python >= 3.11.0
 
 Build with:

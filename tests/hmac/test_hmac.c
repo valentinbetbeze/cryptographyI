@@ -12,7 +12,8 @@ int main(int argc, char *argv[])
     if (argc != 6)
     {
         fprintf(stderr,
-                "Usage: %s <key_hex> <klen_bytes> <msg_hex> <msglen_bytes> <tlen_bytes>\n",
+                "Usage: %s <key_hex> <klen_bytes> <msg_hex> <msglen_bytes> "
+                "<tlen_bytes>\n",
                 argv[0]);
         return 1;
     }
@@ -25,7 +26,9 @@ int main(int argc, char *argv[])
 
     if (tlen <= 0 || tlen > SHA256_MD_SZ)
     {
-        fprintf(stderr, "Invalid tag length: must be in [1, %u]\n", SHA256_MD_SZ);
+        fprintf(stderr,
+                "Invalid tag length: must be in [1, %u]\n",
+                SHA256_MD_SZ);
         return 1;
     }
 
@@ -60,7 +63,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    hash_descriptor_t sha = { .alg = SHA256, .fn = sha256 };
+    hash_descriptor_t sha = {.alg = SHA256, .fn = sha256};
 
     uint8_t tag[SHA256_MD_SZ];
     if (hmac(&sha, key, klen, msg, msglen, tag) != 0)
