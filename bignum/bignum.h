@@ -51,13 +51,13 @@
  */
 typedef enum
 {
-    BN_OK = 0,          // Operation completed successfully
-    BN_ERR_BAD_PTR,     // Null input pointers
-    BN_ERR_BAD_LENGTH,  // Invalid length (e.g., 0)
-    BN_ERR_BAD_ENC,     // Invalid ASCII encoding
-    BN_ERR_BAD_VALUE,   // Invalid input value (function specific)
-    BN_ERR_NO_MEMORY,   // Memory allocation failure
-    BN_ERR_OVERFLOW,    // Result overflowed (in-place usage only)
+    BN_OK = 0,         // Operation completed successfully
+    BN_ERR_BAD_PTR,    // Null input pointers
+    BN_ERR_BAD_LENGTH, // Invalid length (e.g., 0)
+    BN_ERR_BAD_ENC,    // Invalid ASCII encoding
+    BN_ERR_BAD_VALUE,  // Invalid input value (function specific)
+    BN_ERR_NO_MEMORY,  // Memory allocation failure
+    BN_ERR_OVERFLOW,   // Result overflowed (in-place usage only)
 } bn_ret_t;
 
 /**

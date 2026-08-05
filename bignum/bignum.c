@@ -271,6 +271,7 @@ bn_ret_t bn_reset(bn_t *bn)
         free(bn->bstr);
     }
 
+    bn->bstr        = NULL;
     bn->len         = 0;
     bn->is_negative = false;
 
@@ -313,7 +314,7 @@ bn_ret_t bn_tostring(const bn_t *bn, int base, char **pstr, size_t *len)
     int msw_idx = 0; // index used to keep track of the most significant word
     const size_t blen_w = bn->len / sizeof(uint32_t); // bignum length in words
     const size_t slen   = get_slen_from_blen(bn->len, base) +
-                        ((bn->is_negative) ? 1 : 0);
+                          ((bn->is_negative) ? 1 : 0);
 
     char *str = (char *)malloc(slen + 1); // + 1 for null terminator
     if (str == NULL)
@@ -434,7 +435,7 @@ bn_ret_t bn_add(const bn_t *a, const bn_t *b, bn_t *out)
     const size_t wlen_min = len_min / sizeof(uint32_t);
     const size_t wlen_out = out->len / sizeof(uint32_t);
 
-    for (int i = 0; i < len_min; i++)
+    for (int i = 0; i < wlen_min; i++)
     {
         bn_ret_t ret = add_with_carry((uint32_t *)&out->bstr[i],
                                       wlen_out - i,
