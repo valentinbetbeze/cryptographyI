@@ -34,6 +34,16 @@ target_include_directories(utils PUBLIC
 )
 
 # ============================================
+# Bignum Library
+# ============================================
+add_library(bignum
+    bignum/bignum.c
+)
+target_include_directories(bignum PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/bignum
+)
+
+# ============================================
 # FIPS Test Infrastructure
 # ============================================
 # Find Python
