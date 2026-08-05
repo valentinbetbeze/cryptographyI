@@ -195,6 +195,10 @@ bn_ret_t bn_init(bn_t *bn, const char *str, int base)
             const uint32_t overflow  = tmp >> 32;        // tmp / 2^32
             const uint32_t remainder = tmp & UINT32_MAX; // tmp % 2^32
 
+            buf[i] = remainder;
+
+            /* In the case of an overflow, the quotient must be added to the
+             * next word; as tmp = q * (2^32)^1 + r * (2^32)^0 */
             if (overflow > 0)
             {
                 if (i == (blen_w - 1))
@@ -202,11 +206,6 @@ bn_ret_t bn_init(bn_t *bn, const char *str, int base)
                     free(buf);
                     return BN_ERR_OVERFLOW;
                 }
-
-                /* In the case of an 2^32-base overflow, the quotient must be
-                 * added to the next word, and the current word becomes the
-                 * remainder. tmp = q * (2^32)^1 + r * (2^32)^0; */
-                buf[i] = remainder;
 
                 int overflow_idx = i + 1;
                 int num_carries  = 0;
@@ -314,7 +313,7 @@ bn_ret_t bn_tostring(const bn_t *bn, int base, char **pstr, size_t *len)
     int msw_idx = 0; // index used to keep track of the most significant word
     const size_t blen_w = bn->len / sizeof(uint32_t); // bignum length in words
     const size_t slen   = get_slen_from_blen(bn->len, base) +
-                          ((bn->is_negative) ? 1 : 0);
+                        ((bn->is_negative) ? 1 : 0);
 
     char *str = (char *)malloc(slen + 1); // + 1 for null terminator
     if (str == NULL)
