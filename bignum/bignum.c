@@ -309,8 +309,8 @@ bn_ret_t bn_tostring(const bn_t *bn, int base, char **pstr, size_t *len)
         return BN_ERR_BAD_VALUE;
     }
 
-    int str_idx = 0; // index used to iterate over the string array
-    int msw_idx = 0; // index used to keep track of the most significant word
+    int last_idx = 0; // index used to iterate over the string array
+    int msw_idx  = 0; // index used to keep track of the most significant word
     const size_t blen_w = bn->len / sizeof(uint32_t); // bignum length in words
     const size_t slen   = get_slen_from_blen(bn->len, base) +
                         ((bn->is_negative) ? 1 : 0);
@@ -332,7 +332,7 @@ bn_ret_t bn_tostring(const bn_t *bn, int base, char **pstr, size_t *len)
 
     if (bn->is_negative)
     {
-        str[str_idx++] = '-';
+        str[last_idx++] = '-';
     }
 
     // Find the most significant word
@@ -367,19 +367,19 @@ bn_ret_t bn_tostring(const bn_t *bn, int base, char **pstr, size_t *len)
         }
 
         // The final remainder gives the digit value in the target base
-        str[str_idx++] = remainder + ((remainder < 10) ? '0' : -10 + 'a');
+        str[last_idx++] = remainder + ((remainder < 10) ? '0' : -10 + 'a');
     }
+    str[last_idx] = '\0'; // Append the null terminator
 
     // Reverse the string (ignore '-' sign if present)
-    char *ptr          = (bn->is_negative) ? &str[1] : &str[0];
-    const int last_idx = (bn->is_negative) ? str_idx - 1 : str_idx;
-    for (int i = 0; i <= last_idx; i++)
+    char *ptr              = (bn->is_negative) ? &str[1] : &str[0];
+    const int ptr_last_idx = (bn->is_negative) ? last_idx - 2 : last_idx - 1;
+    for (int i = 0; i <= ptr_last_idx / 2; i++)
     {
-        const char tmp    = ptr[i];
-        ptr[i]            = ptr[last_idx - i];
-        ptr[last_idx - i] = tmp;
+        const char tmp        = ptr[i];
+        ptr[i]                = ptr[ptr_last_idx - i];
+        ptr[ptr_last_idx - i] = tmp;
     }
-    ptr[last_idx] = '\0'; // Append the null terminator
 
     *pstr = str;
     *len  = slen;
