@@ -243,8 +243,11 @@ bn_ret_t bn_init(bn_t *bn, const char *str, int base)
         }
     }
 
+    /* Keep the real number of bytes making the bignum only, not the full size
+     * of the buffer as it was allocated on a worst-case basis (largest number
+     * that could fit in slen. */
+    bn->len  = (msw_idx + 1) * sizeof(uint32_t);
     bn->bstr = (uint8_t *)buf;
-    bn->len  = blen;
 
     return BN_OK;
 }
@@ -313,7 +316,7 @@ bn_ret_t bn_tostring(const bn_t *bn, int base, char **pstr, size_t *len)
     int msw_idx  = 0; // index used to keep track of the most significant word
     const size_t blen_w = bn->len / sizeof(uint32_t); // bignum length in words
     const size_t slen   = get_slen_from_blen(bn->len, base) +
-                        ((bn->is_negative) ? 1 : 0);
+                          ((bn->is_negative) ? 1 : 0);
 
     char *str = (char *)malloc(slen + 1); // + 1 for null terminator
     if (str == NULL)
@@ -410,35 +413,48 @@ bn_ret_t bn_add(const bn_t *a, const bn_t *b, bn_t *out)
         return BN_ERR_BAD_VALUE;
     }
 
-    const size_t len_max = (a->len > b->len) ? a->len : b->len;
-    const size_t len_min = (a->len < b->len) ? a->len : b->len;
+    const bn_t *addend = NULL;
 
-    if (out != a && out != b)
+    if (out == a || out == b)
     {
-        // Not in-place; need to (re)allocate memory
+        addend = (a == out) ? b : a;
+    }
+    else
+    {
+        /* The strategy for non-in-place operation is to copy the largest addend
+         * in the output buffer, and add the smaller addend in it. */
+        const bn_t *min = (a->len > b->len) ? b : a;
+        const bn_t *max = (a->len > b->len) ? a : b;
+
+        addend = min;
+
         if (out->bstr)
         {
             bn_reset(out);
         }
-
-        out->len  = len_max;
-        out->bstr = (uint8_t *)calloc(len_max, sizeof(uint8_t));
+        // Add a word to account for a potential overflow
+        out->len  = max->len + sizeof(uint32_t);
+        out->bstr = (uint8_t *)calloc(out->len, sizeof(uint8_t));
         if (!out->bstr)
         {
             return BN_ERR_NO_MEMORY;
         }
-
-        memcpy(out->bstr, a->bstr, a->len);
+        memcpy(out->bstr, max->bstr, max->len);
     }
 
-    const size_t wlen_min = len_min / sizeof(uint32_t);
-    const size_t wlen_out = out->len / sizeof(uint32_t);
+    const size_t wlen_addend = addend->len / sizeof(uint32_t);
+    const size_t wlen_out    = out->len / sizeof(uint32_t);
 
-    for (int i = 0; i < wlen_min; i++)
+    for (int i = 0; i < wlen_addend; i++)
     {
-        bn_ret_t ret = add_with_carry((uint32_t *)&out->bstr[i],
+        if (wlen_out <= i)
+        {
+            return BN_ERR_OVERFLOW;
+        }
+
+        bn_ret_t ret = add_with_carry(&((uint32_t *)out->bstr)[i],
                                       wlen_out - i,
-                                      ((uint32_t *)b->bstr)[i],
+                                      ((uint32_t *)addend->bstr)[i],
                                       NULL);
         if (ret != BN_OK)
         {
@@ -447,8 +463,7 @@ bn_ret_t bn_add(const bn_t *a, const bn_t *b, bn_t *out)
         }
     }
 
-    // TODO: 2. implement addition with negative support, and without in-place
-    // TODO: 3. implement addition with negative support, and with in-place
+    // TODO: 2. implement addition with negative support
 
     return BN_OK;
 }

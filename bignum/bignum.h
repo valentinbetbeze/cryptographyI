@@ -66,7 +66,7 @@ typedef enum
 typedef struct
 {
     uint8_t *bstr;    // Byte string, LSB-first
-    size_t len;       // Byte string length
+    size_t len;       // Length of the bignum in byte
     bool is_negative; // True if the bignum is negative
 } bn_t;
 

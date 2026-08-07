@@ -142,7 +142,7 @@ target_include_directories(test_bignum PRIVATE ${GMP_INCLUDE_DIRS})
 target_link_libraries(test_bignum PRIVATE bignum ${GMP_LIBRARIES})
 
 set(BIGNUM_SEED 0 CACHE STRING "Fixed seed for bignum test reproducibility (0 = time-based)")
-set(BIGNUM_ITERATIONS 1000 CACHE STRING "Random iterations per bignum operation test")
+set(BIGNUM_ITERATIONS 10000 CACHE STRING "Random iterations per bignum operation test")
 
 add_test(NAME BIGNUM_bridge
     COMMAND test_bignum bridge --seed ${BIGNUM_SEED})
@@ -155,17 +155,12 @@ endforeach()
 
 add_test(NAME BIGNUM_add
     COMMAND test_bignum add --scenario basic --seed ${BIGNUM_SEED} --iterations ${BIGNUM_ITERATIONS})
-
-# bn_add's negative-operand and in-place paths are TODOs in bignum.c even
-# though the positive/non-in-place path is live; kept as separate CTest
-# entries so they don't get lumped in with the passing basic scenario.
 add_test(NAME BIGNUM_add_negative
     COMMAND test_bignum add --scenario negative --seed ${BIGNUM_SEED} --iterations ${BIGNUM_ITERATIONS})
 set_tests_properties(BIGNUM_add_negative PROPERTIES WILL_FAIL TRUE)
 
 add_test(NAME BIGNUM_add_inplace
     COMMAND test_bignum add --scenario inplace --seed ${BIGNUM_SEED})
-set_tests_properties(BIGNUM_add_inplace PROPERTIES WILL_FAIL TRUE)
 
 # Still-stubbed operations (bignum.c: `return BN_OK;` with no logic).
 # WILL_FAIL is a forcing function: this test currently "passes" because it's
