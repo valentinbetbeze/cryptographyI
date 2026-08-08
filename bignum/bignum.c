@@ -64,6 +64,57 @@ static unsigned int get_int_from_char(char ch, int base, bool *is_valid)
 }
 
 /**
+ * @brief Checks if the absolute value of a is greater than or equal to the
+ * absolute value of b, e.g., |a| >= |b|
+ *
+ * @param [in] a Reference operand
+ * @param [in] b Operand compared against
+ *
+ * @return true if |a| >= |b|; else false.
+ *
+ * @details The absolute value means that the sign of the bignum is not
+ * accounted in the comparison.
+ */
+static bool is_greater_or_equal_abs(const bn_t *a, const bn_t *b)
+{
+    assert(a);
+    assert(b);
+
+    int l = 0; // lesser-than lock
+    int g = 0; // greater-than lock
+
+    const size_t len = (a->len > b->len) ? a->len : b->len;
+
+    for (int i = len - 1; i >= 0; i--)
+    {
+        for (int n = (BITS_PER_BYTES - 1); n >= 0; n--)
+        {
+            int bit_a = (i < a->len) ? (a->bstr[i] >> n) & 1 : 0;
+            int bit_b = (i < b->len) ? (b->bstr[i] >> n) & 1 : 0;
+
+            /* Defined via the following truth tables:
+
+            a b g | l (a<b)   a b l | g (a>b)
+            0 0 0 | 0         0 0 0 | 0
+            0 1 0 | 1         0 1 0 | 0
+            1 0 0 | 0         1 0 0 | 1
+            1 1 0 | 0         1 1 0 | 0
+            0 0 1 | 0         0 0 1 | 0
+            0 1 1 | 0         0 1 1 | 0
+            1 0 1 | 0         1 0 1 | 0
+            1 1 1 | 0         1 1 1 | 0
+
+            Locks must be sticky, hence the bitwise-OR. */
+
+            l |= ~bit_a & bit_b & ~g;
+            g |= bit_a & ~bit_b & ~l;
+        }
+    }
+
+    return (l == 0);
+}
+
+/**
  * @brief Add a value to a bignum word array and propagate the carry.
  *
  * @param [in]  dst         Least signinficant word of the buffer to add into
