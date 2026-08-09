@@ -1,4 +1,4 @@
-.PHONY: build test clean format
+.PHONY: build build-dbg test clean format
 
 all: build
 
@@ -11,7 +11,15 @@ build-dbg:
 	cmake --build --preset gcc-debug
 
 test:
-	ctest --preset gcc-test
+	@if [ "$$(uname -s)" = "Linux" ]; then \
+		cmake --preset gcc-sanitize && \
+		cmake --build --preset gcc-sanitize && \
+		ctest --preset gcc-test-sanitize; \
+	else \
+		echo "Skipping mandatory sanitizer test pass: unsupported on $$(uname -s) (LeakSanitizer requires Linux)." && \
+		@make build && \
+		ctest --preset gcc-test; \
+	fi
 
 format:
 	find . -type f \( -name '*.c' -o -name '*.h' \) -exec clang-format -i {} \;

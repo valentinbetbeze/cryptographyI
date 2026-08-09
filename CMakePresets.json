@@ -75,6 +75,22 @@
       "cacheVariables": {
         "CMAKE_C_COMPILER": "gcc-13"
       }
+    },
+    {
+      "name": "gcc-sanitize",
+      "displayName": "GCC Sanitize (ASan+UBSan+LeakSanitizer)",
+      "description": "Instrumented build for mandatory memory-safety checks (leaks, use-after-free, double-free, buffer overflow, UB). Linux only: LeakSanitizer is unsupported on Windows and arm64 macOS.",
+      "inherits": "gcc-base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_FLAGS": "-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -g -O1",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
+      }
     }
   ],
   "buildPresets": [
@@ -89,6 +105,12 @@
       "displayName": "Build GCC Release",
       "configurePreset": "gcc-release",
       "configuration": "Release"
+    },
+    {
+      "name": "gcc-sanitize",
+      "displayName": "Build GCC Sanitize",
+      "configurePreset": "gcc-sanitize",
+      "configuration": "Debug"
     }
   ],
   "testPresets": [
@@ -96,6 +118,22 @@
       "name": "gcc-test",
       "displayName": "Test with GCC",
       "configurePreset": "gcc-release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": false
+      }
+    },
+    {
+      "name": "gcc-test-sanitize",
+      "displayName": "Test with GCC Sanitizers (mandatory memory-safety check)",
+      "configurePreset": "gcc-sanitize",
+      "environment": {
+        "ASAN_OPTIONS": "halt_on_error=1:abort_on_error=1:detect_leaks=1",
+        "UBSAN_OPTIONS": "halt_on_error=1:abort_on_error=1:print_stacktrace=1"
+      },
       "output": {
         "outputOnFailure": true
       },

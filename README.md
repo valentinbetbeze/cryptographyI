@@ -21,6 +21,10 @@ Install the following:
 * libgmp-dev >= 6.3.0
 * python >= 3.11.0
 
+On Fedora/RHEL:
+* libasan >= 8.0.0
+* libubsan >= 1.0.0
+
 Build with:
 `cmake --preset gcc-release && cmake --build --preset gcc-release`
 

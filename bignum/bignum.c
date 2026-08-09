@@ -608,6 +608,8 @@ bn_ret_t bn_tostring(const bn_t *bn, int base, char **pstr, size_t *len)
     *pstr = str;
     *len  = slen;
 
+    free(buf);
+
     return BN_OK;
 }
 
