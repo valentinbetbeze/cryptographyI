@@ -137,16 +137,49 @@ static bn_ret_t add_with_carry(uint32_t *dst,
 
     dst[i] += value;
 
-    while (dst[i] < old_value)
+    while (i < wlen && dst[i] < old_value)
     {
-        if (i == (wlen - 1))
-        {
-            return BN_ERR_OVERFLOW;
-        }
-
         i++;
         old_value = dst[i];
         dst[i] += 1;
+    }
+
+    if (carry_words)
+    {
+        *carry_words = i;
+    }
+
+    return BN_OK;
+}
+
+/**
+ * @brief Subtract a value to a bignum word array and propagate the carry.
+ *
+ * @param [in]  dst         Least signinficant word of the buffer to add into
+ * @param [in]  wlen        Number of words in the buffer, starting at dst
+ * @param [in]  value       Word value to subtract
+ * @param [out] carry_words (Optional) Number of words affected by the carry
+ *
+ * @return BN_ERR_OVERFLOW if the addition overflows the bignum array; else
+ * BN_OK.
+ */
+static bn_ret_t sub_with_carry(uint32_t *dst,
+                               size_t wlen,
+                               uint32_t value,
+                               int *carry_words)
+{
+    assert(dst);
+
+    int i              = 0;
+    uint32_t old_value = dst[i];
+
+    dst[i] -= value;
+
+    while (i < wlen && dst[i] > old_value)
+    {
+        i++;
+        old_value = dst[i];
+        dst[i] -= 1;
     }
 
     if (carry_words)
@@ -205,16 +238,18 @@ static bn_ret_t add_unsigned(const bn_t *a, const bn_t *b, bn_t *out)
 
     for (int i = 0; i < wlen_min; i++)
     {
-        // Cannot overflow as the destination buffer is properly sized.
         int num_carries = 0;
-        (void)add_with_carry(&((uint32_t *)dst)[i],
-                             wlen_dst - i,
-                             ((uint32_t *)min->bstr)[i],
-                             &num_carries);
-        int upper_idx = i + num_carries;
-        if (upper_idx > msw_i)
+        uint32_t *dst_w = (uint32_t *)dst;
+        uint32_t to_add = ((uint32_t *)min->bstr)[i];
+
+        // Cannot overflow as the destination buffer is properly sized.
+        (void)add_with_carry(&dst_w[i], wlen_dst - i, to_add, &num_carries);
+
+        // Keep track of the most significant word index
+        int last_idx = i + num_carries;
+        if (last_idx > msw_i)
         {
-            msw_i = upper_idx;
+            msw_i = last_idx;
         }
     }
 
@@ -225,6 +260,76 @@ static bn_ret_t add_unsigned(const bn_t *a, const bn_t *b, bn_t *out)
     }
     out->bstr        = dst;
     out->bstr_len    = required_capacity;
+    out->len         = (msw_i + 1) * sizeof(uint32_t);
+    out->is_negative = false;
+
+    return BN_OK;
+}
+
+/**
+ * @brief Compute the absolute difference of two unsigned bignums, with
+ * |a|>=|b|.
+ *
+ * @param [in]  a   First operand
+ * @param [in]  b   Second operand
+ * @param [out] out Subtraction result: out = ||a|-|b||
+ *
+ * @return Status code
+ *
+ * @details This function supports in-place operation.
+ */
+static bn_ret_t sub_unsigned(const bn_t *a, const bn_t *b, bn_t *out)
+{
+    assert(a);
+    assert(a->bstr);
+    assert(b);
+    assert(b->bstr);
+    assert(out);
+    assert(!(a == b && a == out));
+
+    uint8_t *dst = out->bstr; // Default destination buffer
+
+    const bool is_inplace = (out == a || out == b);
+    const bn_t *max       = a;
+    const bn_t *min       = b;
+
+    // Allocate memory except for an inplace operation on the largest bignum
+    if (out != max)
+    {
+        dst = (uint8_t *)calloc(max->len, sizeof(uint8_t));
+        if (!dst)
+        {
+            return BN_ERR_NO_MEMORY;
+        }
+        memcpy(dst, max->bstr, max->len);
+    }
+
+    int msw_i             = (max->len - 1) / sizeof(uint32_t);
+    const size_t wlen_min = min->len / sizeof(uint32_t);
+    const size_t wlen_dst = max->len / sizeof(uint32_t);
+
+    for (int i = 0; i < wlen_min; i++)
+    {
+        uint32_t *dst_w = (uint32_t *)dst;
+        uint32_t to_sub = ((uint32_t *)min->bstr)[i];
+
+        // Cannot underflow as |dst|=|max|>|min|
+        (void)sub_with_carry(&dst_w[i], wlen_dst - i, to_sub, NULL);
+
+        // Keep track of the most significant word index
+        while (msw_i > 0 && dst_w[msw_i] == 0)
+        {
+            msw_i--;
+        }
+    }
+
+    // Package the output
+    if (out->bstr && out->bstr != dst)
+    {
+        free(out->bstr);
+    }
+    out->bstr        = dst;
+    out->bstr_len    = max->len;
     out->len         = (msw_i + 1) * sizeof(uint32_t);
     out->is_negative = false;
 
@@ -326,12 +431,6 @@ bn_ret_t bn_init(bn_t *bn, const char *str, int base)
              * next word; as tmp = q * (2^32)^1 + r * (2^32)^0 */
             if (overflow > 0)
             {
-                if (i == (blen_w - 1))
-                {
-                    free(buf);
-                    return BN_ERR_OVERFLOW;
-                }
-
                 int overflow_idx = i + 1;
                 int num_carries  = 0;
 
@@ -542,7 +641,30 @@ bn_ret_t bn_add(const bn_t *a, const bn_t *b, bn_t *out)
     const bn_t *max   = (a_ge_b) ? a : b;
     const bn_t *min   = (a_ge_b) ? b : a;
 
-    return add_unsigned(max, min, out);
+    // Let a and b two positive bignums
+
+    // Case 1: (+a)+(+b) = +(a+b)
+    // Case 2: (-a)+(-b) = -(a+b)
+    if (a->is_negative == b->is_negative)
+    {
+        ret = add_unsigned(max, min, out);
+        if (ret == BN_OK)
+        {
+            out->is_negative = a->is_negative;
+        }
+    }
+    // Case 3: (+a)+(-b) = +|a-b|
+    // Case 4: (-a)+(+b) = -|a-b|
+    else
+    {
+        ret = sub_unsigned(max, min, out);
+        if (ret == BN_OK)
+        {
+            out->is_negative = (a_ge_b) ? a->is_negative : b->is_negative;
+        }
+    }
+
+    return ret;
 }
 
 /**

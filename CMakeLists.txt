@@ -183,8 +183,8 @@ add_test(NAME BIGNUM_add
     COMMAND test_bignum add --scenario basic --seed ${BIGNUM_SEED} --iterations ${BIGNUM_ITERATIONS})
 add_test(NAME BIGNUM_add_inplace
     COMMAND test_bignum add --scenario inplace --seed ${BIGNUM_SEED})
-# add_test(NAME BIGNUM_add_negative
-#     COMMAND test_bignum add --scenario negative --seed ${BIGNUM_SEED} --iterations ${BIGNUM_ITERATIONS})
+add_test(NAME BIGNUM_add_negative
+    COMMAND test_bignum add --scenario negative --seed ${BIGNUM_SEED} --iterations ${BIGNUM_ITERATIONS})
 
 # Still-stubbed operations (bignum.c: `return BN_OK;` with no logic).
 # WILL_FAIL is a forcing function: this test currently "passes" because it's

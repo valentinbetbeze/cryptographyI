@@ -57,7 +57,6 @@ typedef enum
     BN_ERR_BAD_ENC,    // Invalid ASCII encoding
     BN_ERR_BAD_VALUE,  // Invalid input value (function specific)
     BN_ERR_NO_MEMORY,  // Memory allocation failure
-    BN_ERR_OVERFLOW,   // Result overflowed (in-place usage only)
 } bn_ret_t;
 
 /**
