@@ -180,17 +180,11 @@ endforeach()
 add_test(NAME BIGNUM_is_greater_or_equal_abs
     COMMAND test_bignum_internal --seed ${BIGNUM_SEED} --iterations ${BIGNUM_ITERATIONS})
 add_test(NAME BIGNUM_add
-    COMMAND test_bignum add --scenario basic --seed ${BIGNUM_SEED} --iterations ${BIGNUM_ITERATIONS})
+    COMMAND test_bignum add --seed ${BIGNUM_SEED} --iterations ${BIGNUM_ITERATIONS})
 add_test(NAME BIGNUM_add_inplace
-    COMMAND test_bignum add --scenario inplace --seed ${BIGNUM_SEED})
-add_test(NAME BIGNUM_add_negative
-    COMMAND test_bignum add --scenario negative --seed ${BIGNUM_SEED} --iterations ${BIGNUM_ITERATIONS})
+    COMMAND test_bignum add_inplace --seed ${BIGNUM_SEED})
+add_test(NAME BIGNUM_sub
+    COMMAND test_bignum sub --seed ${BIGNUM_SEED} --iterations ${BIGNUM_ITERATIONS})
+add_test(NAME BIGNUM_sub_inplace
+    COMMAND test_bignum sub_inplace --seed ${BIGNUM_SEED})
 
-# Still-stubbed operations (bignum.c: `return BN_OK;` with no logic).
-# WILL_FAIL is a forcing function: this test currently "passes" because it's
-# *expected* to fail; the day the stub is implemented, remove WILL_FAIL in
-# the same change, or CTest will start reporting a spurious failure here.
-foreach(OP sub)
-    add_test(NAME BIGNUM_${OP}
-        COMMAND test_bignum ${OP} --seed ${BIGNUM_SEED} --iterations ${BIGNUM_ITERATIONS})
-endforeach()

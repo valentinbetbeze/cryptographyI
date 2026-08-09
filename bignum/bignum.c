@@ -258,10 +258,9 @@ static bn_ret_t add_unsigned(const bn_t *a, const bn_t *b, bn_t *out)
     {
         free(out->bstr);
     }
-    out->bstr        = dst;
-    out->bstr_len    = required_capacity;
-    out->len         = (msw_i + 1) * sizeof(uint32_t);
-    out->is_negative = false;
+    out->bstr     = dst;
+    out->bstr_len = required_capacity;
+    out->len      = (msw_i + 1) * sizeof(uint32_t);
 
     return BN_OK;
 }
@@ -328,10 +327,9 @@ static bn_ret_t sub_unsigned(const bn_t *a, const bn_t *b, bn_t *out)
     {
         free(out->bstr);
     }
-    out->bstr        = dst;
-    out->bstr_len    = max->len;
-    out->len         = (msw_i + 1) * sizeof(uint32_t);
-    out->is_negative = false;
+    out->bstr     = dst;
+    out->bstr_len = max->len;
+    out->len      = (msw_i + 1) * sizeof(uint32_t);
 
     return BN_OK;
 }
@@ -697,6 +695,7 @@ bn_ret_t bn_sub(const bn_t *a, const bn_t *b, bn_t *out)
     if (ret == BN_OK)
     {
         /* A: a->is_negative; B: b->is_negative; O: out->is_negative
+
            A B a>b O  // example
            0 0 0   0	// -2-(-5) = 3
            0 0 1   1	// -5-(-2) =-3
@@ -706,6 +705,7 @@ bn_ret_t bn_sub(const bn_t *a, const bn_t *b, bn_t *out)
            1 0 1   0	//  5-(-2) = 7
            1 1 0   1	//  2-(+5) =-3
            1 1 1   0	//  5-(+2) = 3 */
+
         out->is_negative = (a_ge_b) ? a->is_negative : !b->is_negative;
     }
 
@@ -739,6 +739,8 @@ bn_ret_t bn_mul(const bn_t *a, const bn_t *b, bn_t *out)
  *
  * @details Uses the Euclidean convention where the remainder is always
  *          positive.
+ * @details If only the remainder is of interest, it is advised to use bn_mod
+ *          for performance gains.
  */
 bn_ret_t bn_div(const bn_t *a, const bn_t *b, bn_t *q, bn_t *r)
 {
@@ -754,7 +756,7 @@ bn_ret_t bn_div(const bn_t *a, const bn_t *b, bn_t *q, bn_t *r)
  *
  * @return Status code
  *
- * @details If only the remainder is of interest, it is advised to this
+ * @details If only the remainder is of interest, it is advised to use this
  *          function over bn_div() for performance gains.
  * @retval BN_ERR_BAD_VALUE: modulo zero or a negative modulus
  */

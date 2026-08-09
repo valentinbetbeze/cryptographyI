@@ -271,362 +271,7 @@ static void run_tostring_tests(bn_test_report_t *r, uint64_t seed)
 }
 
 // ==================================================
-// bn_add
-// ==================================================
-
-static void run_add_basic(bn_test_report_t *r,
-                          uint64_t seed,
-                          unsigned iterations)
-{
-    // Edge cases first, positive-only, non-in-place -- the only path bn_add
-    // currently implements. Array order already places single-word values
-    // (0, 1, 2, 2^32-1) before multi-word values, so a real single-word
-    // signal is possible even if multi-word addition is broken.
-    for (size_t i = 0; i < BN_EDGE_MAGNITUDES_COUNT; i++)
-    {
-        for (size_t j = 0; j < BN_EDGE_MAGNITUDES_COUNT; j++)
-        {
-            bn_t a   = {0};
-            bn_t b   = {0};
-            bn_t out = {0};
-            mpz_t ma, mb, expected;
-            mpz_inits(ma, mb, expected, NULL);
-
-            build_pair(bn_edge_magnitudes[i], false, &a, ma);
-            build_pair(bn_edge_magnitudes[j], false, &b, mb);
-            mpz_add(expected, ma, mb);
-
-            bn_ret_t ret = bn_add(&a, &b, &out);
-
-            char desc[300];
-            snprintf(desc,
-                     sizeof(desc),
-                     "bn_add(%s, %s)",
-                     bn_edge_magnitudes[i],
-                     bn_edge_magnitudes[j]);
-
-            if (ret != BN_OK)
-            {
-                char actual_buf[32];
-                snprintf(actual_buf, sizeof(actual_buf), "ret=%d", ret);
-                bn_report_fail(r, seed, desc, "ret=BN_OK", actual_buf);
-            }
-            else
-            {
-                check_bn_eq_mpz(r, seed, desc, &out, expected);
-            }
-
-            bn_reset(&a);
-            bn_reset(&b);
-            bn_reset(&out);
-            mpz_clears(ma, mb, expected, NULL);
-        }
-    }
-
-    // Output ownership policy probe: pre-populate `out` with a stale buffer
-    // before a non-in-place call, confirming it doesn't crash and still
-    // yields a correct result (the reset+realloc path).
-    {
-        bn_t a   = {0};
-        bn_t b   = {0};
-        bn_t out = {0};
-        mpz_t ma, mb, expected;
-        mpz_inits(ma, mb, expected, NULL);
-
-        build_pair("123456789", false, &a, ma);
-        build_pair("987654321", false, &b, mb);
-        mpz_add(expected, ma, mb);
-
-        bn_init(&out, "1", 10); // pre-populate with stale, unrelated data
-
-        bn_ret_t ret     = bn_add(&a, &b, &out);
-        const char *desc = "bn_add() with pre-populated (stale) out buffer";
-        if (ret != BN_OK)
-        {
-            char actual_buf[32];
-            snprintf(actual_buf, sizeof(actual_buf), "ret=%d", ret);
-            bn_report_fail(r, seed, desc, "ret=BN_OK", actual_buf);
-        }
-        else
-        {
-            check_bn_eq_mpz(r, seed, desc, &out, expected);
-        }
-
-        bn_reset(&a);
-        bn_reset(&b);
-        bn_reset(&out);
-        mpz_clears(ma, mb, expected, NULL);
-    }
-
-    // Random fuzzing: positive-only, matching the currently implemented path.
-    bn_prng_t prng;
-    bn_prng_seed(&prng, seed);
-    gmp_randstate_t gmp_rng;
-    gmp_randinit_default(gmp_rng);
-    gmp_randseed_ui(gmp_rng, (unsigned long)seed);
-
-    for (unsigned i = 0; i < iterations; i++)
-    {
-        mpz_t ma, mb, expected;
-        mpz_inits(ma, mb, expected, NULL);
-        bn_t a   = {0};
-        bn_t b   = {0};
-        bn_t out = {0};
-
-        gen_random_value(&prng, gmp_rng, ma, &a);
-        gen_random_value(&prng, gmp_rng, mb, &b);
-        mpz_abs(ma, ma); // basic scenario is positive-only
-        mpz_abs(mb, mb);
-        a.is_negative = false;
-        b.is_negative = false;
-
-        mpz_add(expected, ma, mb);
-        bn_ret_t ret = bn_add(&a, &b, &out);
-
-        char desc[64];
-        snprintf(desc, sizeof(desc), "bn_add() random iteration %u", i);
-
-        if (ret != BN_OK)
-        {
-            char actual_buf[32];
-            snprintf(actual_buf, sizeof(actual_buf), "ret=%d", ret);
-            bn_report_fail(r, seed, desc, "ret=BN_OK", actual_buf);
-        }
-        else
-        {
-            check_bn_eq_mpz(r, seed, desc, &out, expected);
-        }
-
-        bn_reset(&a);
-        bn_reset(&b);
-        bn_reset(&out);
-        mpz_clears(ma, mb, expected, NULL);
-    }
-
-    gmp_randclear(gmp_rng);
-}
-
-static void run_add_negative(bn_test_report_t *r,
-                             uint64_t seed,
-                             unsigned iterations)
-{
-    // Full sign-combination coverage on the edge-case table
-    for (size_t i = 0; i < BN_EDGE_MAGNITUDES_COUNT; i++)
-    {
-        for (size_t j = 0; j < BN_EDGE_MAGNITUDES_COUNT; j++)
-        {
-            for (size_t c = 0; c < BN_SIGN_COMBOS_COUNT; c++)
-            {
-                bn_t a   = {0};
-                bn_t b   = {0};
-                bn_t out = {0};
-                mpz_t ma, mb, expected;
-                mpz_inits(ma, mb, expected, NULL);
-
-                build_pair(bn_edge_magnitudes[i],
-                           bn_sign_combos[c].neg_a,
-                           &a,
-                           ma);
-                build_pair(bn_edge_magnitudes[j],
-                           bn_sign_combos[c].neg_b,
-                           &b,
-                           mb);
-                mpz_add(expected, ma, mb);
-
-                bn_ret_t ret = bn_add(&a, &b, &out);
-
-                char desc[300];
-                snprintf(desc,
-                         sizeof(desc),
-                         "bn_add(%s%s, %s%s)",
-                         bn_sign_combos[c].neg_a ? "-" : "",
-                         bn_edge_magnitudes[i],
-                         bn_sign_combos[c].neg_b ? "-" : "",
-                         bn_edge_magnitudes[j]);
-
-                if (ret != BN_OK)
-                {
-                    char actual_buf[32];
-                    snprintf(actual_buf, sizeof(actual_buf), "ret=%d", ret);
-                    bn_report_fail(r, seed, desc, "ret=BN_OK", actual_buf);
-                }
-                else
-                {
-                    check_bn_eq_mpz(r, seed, desc, &out, expected);
-                }
-
-                bn_reset(&a);
-                bn_reset(&b);
-                bn_reset(&out);
-                mpz_clears(ma, mb, expected, NULL);
-            }
-        }
-    }
-
-    bn_prng_t prng;
-    bn_prng_seed(&prng, seed);
-    gmp_randstate_t gmp_rng;
-    gmp_randinit_default(gmp_rng);
-    gmp_randseed_ui(gmp_rng, (unsigned long)seed);
-
-    for (unsigned i = 0; i < iterations; i++)
-    {
-        mpz_t ma, mb, expected;
-        mpz_inits(ma, mb, expected, NULL);
-        bn_t a   = {0};
-        bn_t b   = {0};
-        bn_t out = {0};
-
-        gen_random_value(&prng,
-                         gmp_rng,
-                         ma,
-                         &a); // signed, per gen_random_value
-        gen_random_value(&prng, gmp_rng, mb, &b);
-
-        mpz_add(expected, ma, mb);
-        bn_ret_t ret = bn_add(&a, &b, &out);
-
-        char desc[64];
-        snprintf(desc, sizeof(desc), "bn_add() signed random iteration %u", i);
-
-        if (ret != BN_OK)
-        {
-            char actual_buf[32];
-            snprintf(actual_buf, sizeof(actual_buf), "ret=%d", ret);
-            bn_report_fail(r, seed, desc, "ret=BN_OK", actual_buf);
-        }
-        else
-        {
-            check_bn_eq_mpz(r, seed, desc, &out, expected);
-        }
-
-        bn_reset(&a);
-        bn_reset(&b);
-        bn_reset(&out);
-        mpz_clears(ma, mb, expected, NULL);
-    }
-
-    gmp_randclear(gmp_rng);
-}
-
-static void run_add_inplace(bn_test_report_t *r, uint64_t seed)
-{
-    (void)seed;
-
-    for (size_t i = 0; i < BN_EDGE_MAGNITUDES_COUNT; i++)
-    {
-        for (size_t j = 0; j < BN_EDGE_MAGNITUDES_COUNT; j++)
-        {
-            // a == out (in-place on first operand)
-            {
-                bn_t a = {0};
-                bn_t b = {0};
-                mpz_t ma, mb, expected;
-                mpz_inits(ma, mb, expected, NULL);
-                build_pair(bn_edge_magnitudes[i], false, &a, ma);
-                build_pair(bn_edge_magnitudes[j], false, &b, mb);
-                mpz_add(expected, ma, mb);
-
-                bn_ret_t ret = bn_add(&a, &b, &a);
-
-                char desc[256];
-                snprintf(desc,
-                         sizeof(desc),
-                         "bn_add(%s, %s, out=a) [a==out]",
-                         bn_edge_magnitudes[i],
-                         bn_edge_magnitudes[j]);
-                if (ret != BN_OK)
-                {
-                    char actual_buf[32];
-                    snprintf(actual_buf, sizeof(actual_buf), "ret=%d", ret);
-                    bn_report_fail(r, seed, desc, "ret=BN_OK", actual_buf);
-                }
-                else
-                {
-                    check_bn_eq_mpz(r, seed, desc, &a, expected);
-                }
-
-                bn_reset(&a);
-                bn_reset(&b);
-                mpz_clears(ma, mb, expected, NULL);
-            }
-
-            // b == out (in-place on second operand)
-            {
-                bn_t a = {0};
-                bn_t b = {0};
-                mpz_t ma, mb, expected;
-                mpz_inits(ma, mb, expected, NULL);
-                build_pair(bn_edge_magnitudes[i], false, &a, ma);
-                build_pair(bn_edge_magnitudes[j], false, &b, mb);
-                mpz_add(expected, ma, mb);
-
-                bn_ret_t ret = bn_add(&a, &b, &b);
-
-                char desc[256];
-                snprintf(desc,
-                         sizeof(desc),
-                         "bn_add(%s, b, out=b) [b==out]",
-                         bn_edge_magnitudes[i]);
-                if (ret != BN_OK)
-                {
-                    char actual_buf[32];
-                    snprintf(actual_buf, sizeof(actual_buf), "ret=%d", ret);
-                    bn_report_fail(r, seed, desc, "ret=BN_OK", actual_buf);
-                }
-                else
-                {
-                    check_bn_eq_mpz(r, seed, desc, &b, expected);
-                }
-
-                bn_reset(&a);
-                bn_reset(&b);
-                mpz_clears(ma, mb, expected, NULL);
-            }
-        }
-    }
-
-    // a == b == out: already guarded in the current implementation, lock it
-    // in as a regression test.
-    {
-        bn_t a = {0};
-        bn_init(&a, "42", 10);
-        bn_ret_t ret = bn_add(&a, &a, &a);
-        check_ret(r,
-                  seed,
-                  "bn_add(a, a, out=a) [a==b==out]",
-                  BN_ERR_BAD_VALUE,
-                  ret);
-        bn_reset(&a);
-    }
-}
-
-static void run_add_tests(bn_test_report_t *r,
-                          uint64_t seed,
-                          unsigned iterations,
-                          const char *scenario)
-{
-    if (scenario == NULL || strcmp(scenario, "basic") == 0)
-    {
-        run_add_basic(r, seed, iterations);
-    }
-    else if (strcmp(scenario, "negative") == 0)
-    {
-        run_add_negative(r, seed, iterations);
-    }
-    else if (strcmp(scenario, "inplace") == 0)
-    {
-        run_add_inplace(r, seed);
-    }
-    else
-    {
-        fprintf(stderr, "Unknown --scenario '%s' for op 'add'\n", scenario);
-        exit(2);
-    }
-}
-
-// ==================================================
-// bn_sub / bn_mul (structurally identical: stubbed binary ops)
+// bn_sub / bn_mul / bn_add (structurally identical binary ops)
 // ==================================================
 
 typedef bn_ret_t (*bn_binop_fn_t)(const bn_t *, const bn_t *, bn_t *);
@@ -735,6 +380,13 @@ static void run_generic_binop_tests(bn_test_report_t *r,
     gmp_randclear(gmp_rng);
 }
 
+static void run_add_tests(bn_test_report_t *r,
+                          uint64_t seed,
+                          unsigned iterations)
+{
+    run_generic_binop_tests(r, seed, iterations, "bn_add", bn_add, mpz_add);
+}
+
 static void run_sub_tests(bn_test_report_t *r,
                           uint64_t seed,
                           unsigned iterations)
@@ -747,6 +399,135 @@ static void run_mul_tests(bn_test_report_t *r,
                           unsigned iterations)
 {
     run_generic_binop_tests(r, seed, iterations, "bn_mul", bn_mul, mpz_mul);
+}
+
+// ==================================================
+// In-place aliasing (functions whose header comment documents in-place
+// support: bn_add, bn_sub)
+// ==================================================
+
+static void run_generic_inplace_tests(bn_test_report_t *r,
+                                      uint64_t seed,
+                                      const char *op_name,
+                                      bn_binop_fn_t bn_fn,
+                                      mpz_binop_fn_t mpz_fn)
+{
+    for (size_t i = 0; i < BN_EDGE_MAGNITUDES_COUNT; i++)
+    {
+        for (size_t j = 0; j < BN_EDGE_MAGNITUDES_COUNT; j++)
+        {
+            for (size_t c = 0; c < BN_SIGN_COMBOS_COUNT; c++)
+            {
+                // a == out (in-place on first operand)
+                {
+                    bn_t a = {0};
+                    bn_t b = {0};
+                    mpz_t ma, mb, expected;
+                    mpz_inits(ma, mb, expected, NULL);
+                    build_pair(bn_edge_magnitudes[i],
+                               bn_sign_combos[c].neg_a,
+                               &a,
+                               ma);
+                    build_pair(bn_edge_magnitudes[j],
+                               bn_sign_combos[c].neg_b,
+                               &b,
+                               mb);
+                    mpz_fn(expected, ma, mb);
+
+                    bn_ret_t ret = bn_fn(&a, &b, &a);
+
+                    char desc[300];
+                    snprintf(desc,
+                             sizeof(desc),
+                             "%s(%s%s, %s%s, out=a) [a==out]",
+                             op_name,
+                             bn_sign_combos[c].neg_a ? "-" : "",
+                             bn_edge_magnitudes[i],
+                             bn_sign_combos[c].neg_b ? "-" : "",
+                             bn_edge_magnitudes[j]);
+                    if (ret != BN_OK)
+                    {
+                        char actual_buf[32];
+                        snprintf(actual_buf, sizeof(actual_buf), "ret=%d", ret);
+                        bn_report_fail(r, seed, desc, "ret=BN_OK", actual_buf);
+                    }
+                    else
+                    {
+                        check_bn_eq_mpz(r, seed, desc, &a, expected);
+                    }
+
+                    bn_reset(&a);
+                    bn_reset(&b);
+                    mpz_clears(ma, mb, expected, NULL);
+                }
+
+                // b == out (in-place on second operand)
+                {
+                    bn_t a = {0};
+                    bn_t b = {0};
+                    mpz_t ma, mb, expected;
+                    mpz_inits(ma, mb, expected, NULL);
+                    build_pair(bn_edge_magnitudes[i],
+                               bn_sign_combos[c].neg_a,
+                               &a,
+                               ma);
+                    build_pair(bn_edge_magnitudes[j],
+                               bn_sign_combos[c].neg_b,
+                               &b,
+                               mb);
+                    mpz_fn(expected, ma, mb);
+
+                    bn_ret_t ret = bn_fn(&a, &b, &b);
+
+                    char desc[300];
+                    snprintf(desc,
+                             sizeof(desc),
+                             "%s(%s%s, %s%s, out=b) [b==out]",
+                             op_name,
+                             bn_sign_combos[c].neg_a ? "-" : "",
+                             bn_edge_magnitudes[i],
+                             bn_sign_combos[c].neg_b ? "-" : "",
+                             bn_edge_magnitudes[j]);
+                    if (ret != BN_OK)
+                    {
+                        char actual_buf[32];
+                        snprintf(actual_buf, sizeof(actual_buf), "ret=%d", ret);
+                        bn_report_fail(r, seed, desc, "ret=BN_OK", actual_buf);
+                    }
+                    else
+                    {
+                        check_bn_eq_mpz(r, seed, desc, &b, expected);
+                    }
+
+                    bn_reset(&a);
+                    bn_reset(&b);
+                    mpz_clears(ma, mb, expected, NULL);
+                }
+            }
+        }
+    }
+
+    // a == b == out: guarded against in the implementation (ambiguous
+    // aliasing), lock it in as a regression test.
+    {
+        bn_t a = {0};
+        bn_init(&a, "42", 10);
+        char desc[128];
+        snprintf(desc, sizeof(desc), "%s(a, a, out=a) [a==b==out]", op_name);
+        bn_ret_t ret = bn_fn(&a, &a, &a);
+        check_ret(r, seed, desc, BN_ERR_BAD_VALUE, ret);
+        bn_reset(&a);
+    }
+}
+
+static void run_add_inplace_tests(bn_test_report_t *r, uint64_t seed)
+{
+    run_generic_inplace_tests(r, seed, "bn_add", bn_add, mpz_add);
+}
+
+static void run_sub_inplace_tests(bn_test_report_t *r, uint64_t seed)
+{
+    run_generic_inplace_tests(r, seed, "bn_sub", bn_sub, mpz_sub);
 }
 
 // ==================================================
@@ -1200,11 +981,11 @@ static void run_modexp_tests(bn_test_report_t *r,
 
 static void print_usage(const char *prog)
 {
-    fprintf(
-        stderr,
-        "Usage: %s <op> [--seed N] [--iterations N] [--scenario NAME] [-v]\n"
-        "  <op>: init|reset|tostring|add|sub|mul|div|mod|modexp|bridge\n",
-        prog);
+    fprintf(stderr,
+            "Usage: %s <op> [--seed N] [--iterations N] [-v]\n"
+            "  <op>: init|reset|tostring|add|add_inplace|sub|sub_inplace|"
+            "mul|div|mod|modexp|bridge\n",
+            prog);
 }
 
 int main(int argc, char *argv[])
@@ -1215,11 +996,10 @@ int main(int argc, char *argv[])
         return 2;
     }
 
-    const char *op       = argv[1];
-    uint64_t seed        = 0;
-    bool seed_set        = false;
-    unsigned iterations  = 1000;
-    const char *scenario = NULL;
+    const char *op      = argv[1];
+    uint64_t seed       = 0;
+    bool seed_set       = false;
+    unsigned iterations = 1000;
 
     for (int i = 2; i < argc; i++)
     {
@@ -1231,10 +1011,6 @@ int main(int argc, char *argv[])
         else if (strcmp(argv[i], "--iterations") == 0 && i + 1 < argc)
         {
             iterations = (unsigned)strtoul(argv[++i], NULL, 10);
-        }
-        else if (strcmp(argv[i], "--scenario") == 0 && i + 1 < argc)
-        {
-            scenario = argv[++i];
         }
         else if (strcmp(argv[i], "-v") == 0)
         {
@@ -1289,11 +1065,19 @@ int main(int argc, char *argv[])
     }
     else if (strcmp(op, "add") == 0)
     {
-        run_add_tests(&report, seed, iterations, scenario);
+        run_add_tests(&report, seed, iterations);
+    }
+    else if (strcmp(op, "add_inplace") == 0)
+    {
+        run_add_inplace_tests(&report, seed);
     }
     else if (strcmp(op, "sub") == 0)
     {
         run_sub_tests(&report, seed, iterations);
+    }
+    else if (strcmp(op, "sub_inplace") == 0)
+    {
+        run_sub_inplace_tests(&report, seed);
     }
     else if (strcmp(op, "mul") == 0)
     {
