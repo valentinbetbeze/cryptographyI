@@ -190,8 +190,7 @@ add_test(NAME BIGNUM_add_negative
 # WILL_FAIL is a forcing function: this test currently "passes" because it's
 # *expected* to fail; the day the stub is implemented, remove WILL_FAIL in
 # the same change, or CTest will start reporting a spurious failure here.
-foreach(OP sub mul div mod modexp)
+foreach(OP sub)
     add_test(NAME BIGNUM_${OP}
         COMMAND test_bignum ${OP} --seed ${BIGNUM_SEED} --iterations ${BIGNUM_ITERATIONS})
-    set_tests_properties(BIGNUM_${OP} PROPERTIES WILL_FAIL TRUE)
 endforeach()

@@ -614,7 +614,7 @@ bn_ret_t bn_tostring(const bn_t *bn, int base, char **pstr, size_t *len)
 }
 
 /**
- * @brief Add two bignums, such that a + b = out.
+ * @brief Add two bignums, such that a+b = out.
  *
  * @param [in]  a   First operand
  * @param [in]  b   Second operand
@@ -641,34 +641,25 @@ bn_ret_t bn_add(const bn_t *a, const bn_t *b, bn_t *out)
     const bn_t *max   = (a_ge_b) ? a : b;
     const bn_t *min   = (a_ge_b) ? b : a;
 
-    // Let a and b two positive bignums
+    /* Let x and y two positive bignums, such that x >= y
+       Case 1: (+x)+(+y) = +(x+y) -> add
+       Case 2: (-x)+(-y) = -(x+y) -> add
+       Case 3: (+x)+(-y) = +(x-y) -> sub
+       Case 4: (-x)+(+y) = -(x-y) -> sub */
 
-    // Case 1: (+a)+(+b) = +(a+b)
-    // Case 2: (-a)+(-b) = -(a+b)
-    if (a->is_negative == b->is_negative)
+    ret = (a->is_negative == b->is_negative) ? add_unsigned(max, min, out) :
+                                               sub_unsigned(max, min, out);
+    if (ret == BN_OK)
     {
-        ret = add_unsigned(max, min, out);
-        if (ret == BN_OK)
-        {
-            out->is_negative = a->is_negative;
-        }
-    }
-    // Case 3: (+a)+(-b) = +|a-b|
-    // Case 4: (-a)+(+b) = -|a-b|
-    else
-    {
-        ret = sub_unsigned(max, min, out);
-        if (ret == BN_OK)
-        {
-            out->is_negative = (a_ge_b) ? a->is_negative : b->is_negative;
-        }
+        // The largest absolute value determines the sign.
+        out->is_negative = max->is_negative;
     }
 
     return ret;
 }
 
 /**
- * @brief Subtract two bignums, such that a - b = out.
+ * @brief Subtract two bignums, such that a-b = out.
  *
  * @param [in]  a   First operand
  * @param [in]  b   Second operand
@@ -680,7 +671,45 @@ bn_ret_t bn_add(const bn_t *a, const bn_t *b, bn_t *out)
  */
 bn_ret_t bn_sub(const bn_t *a, const bn_t *b, bn_t *out)
 {
-    return BN_OK;
+    if (!a || !a->bstr || !b || !b->bstr || !out)
+    {
+        return BN_ERR_BAD_PTR;
+    }
+
+    if (a == b && a == out)
+    {
+        return BN_ERR_BAD_VALUE;
+    }
+
+    bn_ret_t ret      = BN_OK;
+    const bool a_ge_b = is_greater_or_equal_abs(a, b);
+    const bn_t *max   = (a_ge_b) ? a : b;
+    const bn_t *min   = (a_ge_b) ? b : a;
+
+    /* Let x and y two positive bignums, such that x >= y
+       Case 1: (+x)-(+y) = +(x-y) -> sub
+       Case 2: (-x)-(-y) = -(x-y) -> sub
+       Case 3: (+x)-(-y) = +(x+y) -> add
+       Case 4: (-x)-(+y) = -(x+y) -> add */
+
+    ret = (a->is_negative == b->is_negative) ? sub_unsigned(max, min, out) :
+                                               add_unsigned(max, min, out);
+    if (ret == BN_OK)
+    {
+        /* A: a->is_negative; B: b->is_negative; O: out->is_negative
+           A B a>b O  // example
+           0 0 0   0	// -2-(-5) = 3
+           0 0 1   1	// -5-(-2) =-3
+           0 1 0   1	// -2-(+5) =-7
+           0 1 1   1	// -5-(+2) =-7
+           1 0 0   0	//  2-(-5) = 7
+           1 0 1   0	//  5-(-2) = 7
+           1 1 0   1	//  2-(+5) =-3
+           1 1 1   0	//  5-(+2) = 3 */
+        out->is_negative = (a_ge_b) ? a->is_negative : !b->is_negative;
+    }
+
+    return ret;
 }
 
 /**

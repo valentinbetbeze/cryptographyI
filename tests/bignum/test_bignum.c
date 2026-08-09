@@ -410,8 +410,7 @@ static void run_add_negative(bn_test_report_t *r,
                              uint64_t seed,
                              unsigned iterations)
 {
-    // Full sign-combination coverage on the edge-case table -- exercises the
-    // still-TODO negative-support path.
+    // Full sign-combination coverage on the edge-case table
     for (size_t i = 0; i < BN_EDGE_MAGNITUDES_COUNT; i++)
     {
         for (size_t j = 0; j < BN_EDGE_MAGNITUDES_COUNT; j++)
