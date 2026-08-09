@@ -510,47 +510,10 @@ static void run_add_negative(bn_test_report_t *r,
     gmp_randclear(gmp_rng);
 }
 
-/* Minimum bn_t capacity (in bytes, rounded up to a whole 4-byte word as
- * bn_init/bn_add do) needed to hold v without overflow. */
-static size_t required_capacity_bytes(const mpz_t v)
-{
-    const size_t bits  = mpz_sgn(v) == 0 ? 1 : mpz_sizeinbase(v, 2);
-    const size_t bytes = (bits + 7) / 8;
-    return ((bytes + sizeof(uint32_t) - 1) / sizeof(uint32_t)) *
-           sizeof(uint32_t);
-}
-
-static void check_add_inplace_result(bn_test_report_t *r,
-                                     uint64_t seed,
-                                     const char *desc,
-                                     bn_ret_t ret,
-                                     size_t inplace_capacity,
-                                     const bn_t *out,
-                                     const mpz_t expected)
-{
-    const bool fits = required_capacity_bytes(expected) <= inplace_capacity;
-
-    if (fits)
-    {
-        if (ret != BN_OK)
-        {
-            char actual_buf[32];
-            snprintf(actual_buf, sizeof(actual_buf), "ret=%d", ret);
-            bn_report_fail(r, seed, desc, "ret=BN_OK", actual_buf);
-        }
-        else
-        {
-            check_bn_eq_mpz(r, seed, desc, out, expected);
-        }
-    }
-    else
-    {
-        check_ret(r, seed, desc, BN_ERR_OVERFLOW, ret);
-    }
-}
-
 static void run_add_inplace(bn_test_report_t *r, uint64_t seed)
 {
+    (void)seed;
+
     for (size_t i = 0; i < BN_EDGE_MAGNITUDES_COUNT; i++)
     {
         for (size_t j = 0; j < BN_EDGE_MAGNITUDES_COUNT; j++)
@@ -565,8 +528,7 @@ static void run_add_inplace(bn_test_report_t *r, uint64_t seed)
                 build_pair(bn_edge_magnitudes[j], false, &b, mb);
                 mpz_add(expected, ma, mb);
 
-                const size_t inplace_capacity = a.len;
-                bn_ret_t ret                  = bn_add(&a, &b, &a);
+                bn_ret_t ret = bn_add(&a, &b, &a);
 
                 char desc[256];
                 snprintf(desc,
@@ -574,13 +536,16 @@ static void run_add_inplace(bn_test_report_t *r, uint64_t seed)
                          "bn_add(%s, %s, out=a) [a==out]",
                          bn_edge_magnitudes[i],
                          bn_edge_magnitudes[j]);
-                check_add_inplace_result(r,
-                                         seed,
-                                         desc,
-                                         ret,
-                                         inplace_capacity,
-                                         &a,
-                                         expected);
+                if (ret != BN_OK)
+                {
+                    char actual_buf[32];
+                    snprintf(actual_buf, sizeof(actual_buf), "ret=%d", ret);
+                    bn_report_fail(r, seed, desc, "ret=BN_OK", actual_buf);
+                }
+                else
+                {
+                    check_bn_eq_mpz(r, seed, desc, &a, expected);
+                }
 
                 bn_reset(&a);
                 bn_reset(&b);
@@ -597,21 +562,23 @@ static void run_add_inplace(bn_test_report_t *r, uint64_t seed)
                 build_pair(bn_edge_magnitudes[j], false, &b, mb);
                 mpz_add(expected, ma, mb);
 
-                const size_t inplace_capacity = b.len;
-                bn_ret_t ret                  = bn_add(&a, &b, &b);
+                bn_ret_t ret = bn_add(&a, &b, &b);
 
                 char desc[256];
                 snprintf(desc,
                          sizeof(desc),
                          "bn_add(%s, b, out=b) [b==out]",
                          bn_edge_magnitudes[i]);
-                check_add_inplace_result(r,
-                                         seed,
-                                         desc,
-                                         ret,
-                                         inplace_capacity,
-                                         &b,
-                                         expected);
+                if (ret != BN_OK)
+                {
+                    char actual_buf[32];
+                    snprintf(actual_buf, sizeof(actual_buf), "ret=%d", ret);
+                    bn_report_fail(r, seed, desc, "ret=BN_OK", actual_buf);
+                }
+                else
+                {
+                    check_bn_eq_mpz(r, seed, desc, &b, expected);
+                }
 
                 bn_reset(&a);
                 bn_reset(&b);
