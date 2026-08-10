@@ -117,20 +117,16 @@ static bool is_greater_or_equal_abs(const bn_t *a, const bn_t *b)
 /**
  * @brief Add a value to a bignum word array and propagate the carry.
  *
- * @param [in]  dst         Least signinficant word of the buffer to add into
- * @param [in]  wlen        Number of words in the buffer, starting at dst
- * @param [in]  value       Word value to add
- * @param [out] carry_words (Optional) Number of words affected by the carry
+ * @param [in,out] dst   Bignum addend (input) and sum (output)
+ * @param [in]     wlen  Number of words in the dst buffer
+ * @param [in]     value Second added
  *
- * @return BN_ERR_OVERFLOW if the addition overflows the bignum array; else
- * BN_OK.
+ * @return Number of words affected by the carry.
  */
-static bn_ret_t add_with_carry(uint32_t *dst,
-                               size_t wlen,
-                               uint32_t value,
-                               int *carry_words)
+static int add_with_carry(uint32_t *dst, size_t wlen, uint32_t value)
 {
     assert(dst);
+    assert(wlen > 0);
 
     int i              = 0;
     uint32_t old_value = dst[i];
@@ -144,31 +140,20 @@ static bn_ret_t add_with_carry(uint32_t *dst,
         dst[i] += 1;
     }
 
-    if (carry_words)
-    {
-        *carry_words = i;
-    }
-
-    return BN_OK;
+    return i;
 }
 
 /**
  * @brief Subtract a value to a bignum word array and propagate the carry.
  *
- * @param [in]  dst         Least signinficant word of the buffer to add into
- * @param [in]  wlen        Number of words in the buffer, starting at dst
- * @param [in]  value       Word value to subtract
- * @param [out] carry_words (Optional) Number of words affected by the carry
- *
- * @return BN_ERR_OVERFLOW if the addition overflows the bignum array; else
- * BN_OK.
+ * @param [in,out] dst   Bignum minuend (input) and difference (output)
+ * @param [in]     wlen  Number of words in the dst buffer
+ * @param [in]     value Word value to subtract (subtrahend)
  */
-static bn_ret_t sub_with_carry(uint32_t *dst,
-                               size_t wlen,
-                               uint32_t value,
-                               int *carry_words)
+static void sub_with_carry(uint32_t *dst, size_t wlen, uint32_t value)
 {
     assert(dst);
+    assert(wlen);
 
     int i              = 0;
     uint32_t old_value = dst[i];
@@ -181,13 +166,8 @@ static bn_ret_t sub_with_carry(uint32_t *dst,
         old_value = dst[i];
         dst[i] -= 1;
     }
+}
 
-    if (carry_words)
-    {
-        *carry_words = i;
-    }
-
-    return BN_OK;
 }
 
 /**
@@ -243,7 +223,7 @@ static bn_ret_t add_unsigned(const bn_t *a, const bn_t *b, bn_t *out)
         uint32_t to_add = ((uint32_t *)min->bstr)[i];
 
         // Cannot overflow as the destination buffer is properly sized.
-        (void)add_with_carry(&dst_w[i], wlen_dst - i, to_add, &num_carries);
+        num_carries = add_with_carry(&dst_w[i], wlen_dst - i, to_add);
 
         // Keep track of the most significant word index
         int last_idx = i + num_carries;
@@ -312,8 +292,7 @@ static bn_ret_t sub_unsigned(const bn_t *a, const bn_t *b, bn_t *out)
         uint32_t *dst_w = (uint32_t *)dst;
         uint32_t to_sub = ((uint32_t *)min->bstr)[i];
 
-        // Cannot underflow as |dst|=|max|>|min|
-        (void)sub_with_carry(&dst_w[i], wlen_dst - i, to_sub, NULL);
+        sub_with_carry(&dst_w[i], wlen_dst - i, to_sub);
 
         // Keep track of the most significant word index
         while (msw_i > 0 && dst_w[msw_i] == 0)
@@ -430,18 +409,11 @@ bn_ret_t bn_init(bn_t *bn, const char *str, int base)
             if (overflow > 0)
             {
                 int overflow_idx = i + 1;
-                int num_carries  = 0;
+                int num_carries  = add_with_carry(&buf[overflow_idx],
+                                                 blen_w - overflow_idx,
+                                                 overflow);
 
-                bn_ret_t ret = add_with_carry(&buf[overflow_idx],
-                                              blen_w - overflow_idx,
-                                              overflow,
-                                              &num_carries);
-                if (ret != BN_OK)
-                {
-                    free(buf);
-                    return ret;
-                }
-
+                // Keep track of the most significant word
                 int last_idx = overflow_idx + num_carries;
                 if (last_idx > msw_idx)
                 {
@@ -451,14 +423,7 @@ bn_ret_t bn_init(bn_t *bn, const char *str, int base)
         }
 
         // Add the converted digit to the bignum array.
-        int num_carries = 0;
-        bn_ret_t ret    = add_with_carry(buf, blen_w, digit, &num_carries);
-        if (ret != BN_OK)
-        {
-            free(buf);
-            return ret;
-        }
-
+        int num_carries = add_with_carry(buf, blen_w, digit);
         if (num_carries > msw_idx)
         {
             msw_idx = num_carries;
@@ -537,7 +502,7 @@ bn_ret_t bn_tostring(const bn_t *bn, int base, char **pstr, size_t *len)
     int msw_idx  = 0; // index used to keep track of the most significant word
     const size_t blen_w = bn->len / sizeof(uint32_t); // bignum length in words
     const size_t slen   = get_slen_from_blen(bn->len, base) +
-                          ((bn->is_negative) ? 1 : 0);
+                        ((bn->is_negative) ? 1 : 0);
 
     char *str = (char *)malloc(slen + 1); // + 1 for null terminator
     if (str == NULL)
