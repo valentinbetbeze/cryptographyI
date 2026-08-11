@@ -187,4 +187,5 @@ add_test(NAME BIGNUM_sub
     COMMAND test_bignum sub --seed ${BIGNUM_SEED} --iterations ${BIGNUM_ITERATIONS})
 add_test(NAME BIGNUM_sub_inplace
     COMMAND test_bignum sub_inplace --seed ${BIGNUM_SEED})
-
+add_test(NAME BIGNUM_mul
+    COMMAND test_bignum mul --seed ${BIGNUM_SEED} --iterations ${BIGNUM_ITERATIONS})

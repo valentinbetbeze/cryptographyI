@@ -168,6 +168,54 @@ static void sub_with_carry(uint32_t *dst, size_t wlen, uint32_t value)
     }
 }
 
+/**
+ * @brief Multiply a value to a bignum word array and propagate the carry.
+ *
+ * @param [in,out] dst     Multiplicand (input) and factor (output).
+ * @param [in]     wlen    Number of words in the dst buffer
+ * @param [in]     msw_idx Index of the most significant number.
+ * @param [in]     value   Multiplier
+ *
+ * @return The index of the factor's most significant word.
+ */
+static int mul_with_carry(uint32_t *dst,
+                          size_t wlen,
+                          int msw_idx,
+                          uint32_t value)
+{
+    assert(dst);
+    assert(wlen > 0);
+
+    for (int i = msw_idx; i >= 0; i--)
+    {
+        uint64_t tmp = dst[i];
+        tmp *= value;
+
+        // Check and carry overflow
+        const uint32_t overflow  = tmp >> 32;        // tmp / 2^32
+        const uint32_t remainder = tmp & UINT32_MAX; // tmp % 2^32
+
+        dst[i] = remainder;
+
+        /* In the case of an overflow, the quotient must be added to the
+         * next word; as tmp = q * (2^32)^1 + r * (2^32)^0 */
+        if (overflow > 0)
+        {
+            int overflow_idx = i + 1;
+            int num_carries  = add_with_carry(&dst[overflow_idx],
+                                             wlen - overflow_idx,
+                                             overflow);
+
+            // Keep track of the most significant word
+            int last_idx = overflow_idx + num_carries;
+            if (last_idx > msw_idx)
+            {
+                msw_idx = last_idx;
+            }
+        }
+    }
+
+    return msw_idx;
 }
 
 /**
@@ -392,35 +440,7 @@ bn_ret_t bn_init(bn_t *bn, const char *str, int base)
             return BN_ERR_BAD_ENC;
         }
 
-        // Multiply the bignum array by the base
-        for (int i = msw_idx; i >= 0; i--)
-        {
-            uint64_t tmp = buf[i];
-            tmp *= base;
-
-            // Check and carry overflow
-            const uint32_t overflow  = tmp >> 32;        // tmp / 2^32
-            const uint32_t remainder = tmp & UINT32_MAX; // tmp % 2^32
-
-            buf[i] = remainder;
-
-            /* In the case of an overflow, the quotient must be added to the
-             * next word; as tmp = q * (2^32)^1 + r * (2^32)^0 */
-            if (overflow > 0)
-            {
-                int overflow_idx = i + 1;
-                int num_carries  = add_with_carry(&buf[overflow_idx],
-                                                 blen_w - overflow_idx,
-                                                 overflow);
-
-                // Keep track of the most significant word
-                int last_idx = overflow_idx + num_carries;
-                if (last_idx > msw_idx)
-                {
-                    msw_idx = last_idx;
-                }
-            }
-        }
+        msw_idx = mul_with_carry(buf, blen_w, msw_idx, base);
 
         // Add the converted digit to the bignum array.
         int num_carries = add_with_carry(buf, blen_w, digit);
@@ -682,14 +702,102 @@ bn_ret_t bn_sub(const bn_t *a, const bn_t *b, bn_t *out)
 /**
  * @brief Multiply two bignums, such that a * b = out.
  *
- * @param [in]  a   First operand
- * @param [in]  b   Second operand
- * @param [out] out Multiplication result
+ * @param [in]  a   Bignum multiplicand
+ * @param [in]  b   Bignum multiplier
+ * @param [out] out Multiplication result (factor)
  *
- * @return Status code
+ * @details This function supports in-place operation.
  */
 bn_ret_t bn_mul(const bn_t *a, const bn_t *b, bn_t *out)
 {
+    if (!a || !a->bstr || !b || !b->bstr || !out)
+    {
+        return BN_ERR_BAD_PTR;
+    }
+
+    if (a == b && a == out)
+    {
+        return BN_ERR_BAD_VALUE;
+    }
+
+    const bool is_inplace = (out == a || out == b);
+
+    // Add a word to account for a potential overflow
+    const size_t required_capacity = a->len + b->len;
+    const size_t current_capacity  = out->bstr_len;
+
+    // Default destination buffer
+    uint8_t *dst          = out->bstr;
+    const size_t dst_wlen = required_capacity / sizeof(uint32_t);
+
+    const bool reuse_buf = (!is_inplace) &&
+                           (required_capacity <= current_capacity);
+    if (reuse_buf)
+    {
+        // The output buffer will be reused and thus must be wiped.
+        memset(dst, 0, required_capacity);
+    }
+    else
+    {
+        dst = (uint8_t *)calloc(required_capacity, sizeof(uint8_t));
+        if (!dst)
+        {
+            return BN_ERR_NO_MEMORY;
+        }
+    }
+
+    /* Buffer holding intermediate multiplication result. As the multiplicand is
+     * to be multiplied by each word of the bignum multiplier, the buffer size
+     * must add a word in length to the length of the multiplicand: base^n *
+     * base = base^(n+1) */
+    const size_t tmp_len  = a->len + sizeof(uint32_t);
+    const size_t tmp_wlen = tmp_len / sizeof(uint32_t);
+    uint32_t *tmp         = (uint32_t *)malloc(tmp_len);
+    if (!tmp)
+    {
+        free(dst);
+        return BN_ERR_NO_MEMORY;
+    }
+
+    const int msw_idx_a = (a->len / sizeof(uint32_t)) - 1;
+    const int msw_idx_b = (b->len / sizeof(uint32_t)) - 1;
+    int msw_idx         = msw_idx_a;
+    for (int i = 0; i <= msw_idx_b; i++)
+    {
+        // Prepare each operand
+        memcpy(tmp, a->bstr, a->len);
+        tmp[tmp_wlen - 1]         = 0; // clear the extra word
+        const uint32_t multiplier = ((uint32_t *)b->bstr)[i];
+
+        int msw_idx_tmp = mul_with_carry(tmp, tmp_wlen, msw_idx_a, multiplier);
+
+        // Add the intermediate result into the accumulator
+        for (int j = 0; j <= msw_idx_tmp; j++)
+        {
+            uint32_t *dst_w = &((uint32_t *)dst)[j + i];
+            int num_carries = add_with_carry(dst_w, dst_wlen - j - i, tmp[j]);
+
+            // Keep track of the accumulator's most significant word
+            int last_idx = num_carries + j + i;
+            if (msw_idx < last_idx)
+            {
+                msw_idx = last_idx;
+            }
+        }
+    }
+
+    free(tmp);
+
+    // Package the output
+    if (out->bstr && out->bstr != dst)
+    {
+        free(out->bstr);
+    }
+    out->bstr        = dst;
+    out->bstr_len    = required_capacity;
+    out->len         = (msw_idx + 1) * sizeof(uint32_t);
+    out->is_negative = (a->is_negative == b->is_negative) ? false : true;
+
     return BN_OK;
 }
 
